@@ -6,6 +6,7 @@ import os
 import numpy as np
 import torch
 import torchaudio
+import soundfile as sf
 import onnxruntime
 import whisper
 
@@ -108,7 +109,9 @@ class StepAudioTokenizer:
 
     def get_vq02_code(self, audio, session_id=None, is_final=True):
         _tmp_wav = io.BytesIO()
-        torchaudio.save(_tmp_wav, audio, 16000, format="wav")
+        # Use soundfile instead of torchaudio.save (TorchCodec doesn't support BytesIO)
+        audio_np = audio.squeeze(0).cpu().numpy() if audio.dim() > 1 else audio.cpu().numpy()
+        sf.write(_tmp_wav, audio_np, 16000, format='WAV')
         _tmp_wav.seek(0)
 
         with self.vq02_lock:

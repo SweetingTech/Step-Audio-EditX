@@ -507,24 +507,48 @@ Start a local server for online inference.
 Assume you have one GPU with at least 12GB memory available and have already downloaded all the models.
 
 ```bash
-# Step-Audio-EditX demo
+# Standard launch
 python app.py --model-path where_you_download_dir --model-source local
 
-# Memory-efficient options with runtime quantization
-# For systems with limited GPU memory, you can use quantization to reduce memory usage:
+# Using pre-quantized AWQ 4-bit models (recommended)
+python app.py --model-path path/to/quantized/model --model-source local
 
-# INT8 quantization
-python app.py --model-path where_you_download_dir --model-source local --quantization int8
+# Memory-efficient mode (for limited GPU memory, ~6-8GB usage)
+python app.py \
+    --model-path path/to/quantized/model \
+    --model-source local \
+    --gpu-memory-utilization 0.1 \
+    --max-model-len 4096 \
+    --enforce-eager \
+    --max-num-seqs 4 \
+    --cosyvoice-dtype bfloat16 \
+    --no-cosyvoice-cuda-graph
 
-# INT4 quantization
-python app.py --model-path where_you_download_dir --model-source local --quantization int4
-
-# Using pre-quantized AWQ models
-python app.py --model-path path/to/quantized/model --model-source local --quantization awq-4bit
-
-# Example with custom settings:
-python app.py --model-path where_you_download_dir --model-source local --torch-dtype float16 --enable-auto-transcribe
 ```
+
+##### Available Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--model-path` | (required) | Path to the model directory |
+| `--model-source` | `auto` | Model source: `auto`, `local`, `modelscope`, `huggingface` |
+| `--gpu-memory-utilization` | `0.5` | GPU memory ratio for vLLM KV cache (0.0-1.0) |
+| `--max-model-len` | `8192` | Maximum sequence length, affects KV cache size |
+| `--enforce-eager` | `False` | Disable vLLM CUDA Graphs (saves ~0.5GB memory) |
+| `--max-num-seqs` | `None` | Maximum concurrent sequences (vLLM default: 256, lower = less memory) |
+| `--dtype` | `bfloat16` | Model dtype: `float16`, `bfloat16` |
+| `--quantization` | `None` | Quantization method: `awq`, `gptq`, `fp8` |
+| `--cosyvoice-dtype` | `float32` | CosyVoice vocoder dtype: `float32`, `bfloat16`, `float16` |
+| `--no-cosyvoice-cuda-graph` | `False` | Disable CosyVoice CUDA Graphs (saves memory) |
+| `--enable-auto-transcribe` | `False` | Enable automatic audio transcription |
+
+##### Memory Usage Guide
+
+| Configuration | Estimated GPU Memory | Use Case |
+|--------------|---------------------|----------|
+| Standard (defaults) | ~12-15 GB | Best quality and speed |
+| Memory-efficient | ~6-8 GB | Limited GPU memory, some quality trade-off |
+| AWQ 4-bit quantized | ~8-10 GB | Good balance of quality and memory |
 
 ### 🔄 Model Quantization (Optional)
 

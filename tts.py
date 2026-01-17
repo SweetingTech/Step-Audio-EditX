@@ -15,12 +15,10 @@ import torchaudio
 from model_loader import model_loader, ModelSource
 from config.prompts import AUDIO_EDIT_CLONE_SYSTEM_PROMPT_TPL, AUDIO_EDIT_SYSTEM_PROMPT
 from stepvocoder.cosyvoice2.cli.cosyvoice import CosyVoice
-from transformers.generation.logits_process import LogitsProcessor
-from transformers.generation.utils import LogitsProcessorList
+from vllm import SamplingParams
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
 
 class HTTPException(Exception):
     """Custom HTTP exception for API errors"""
@@ -30,29 +28,10 @@ class HTTPException(Exception):
         super().__init__(detail)
 
 
-class RepetitionAwareLogitsProcessor(LogitsProcessor):
-    """Logits processor to handle repetition in generation"""
-    def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
-    ) -> torch.FloatTensor:
-        window_size = 10
-        threshold = 0.1
-
-        window = input_ids[:, -window_size:]
-        if window.shape[1] < window_size:
-            return scores
-
-        last_tokens = window[:, -1].unsqueeze(-1)
-        repeat_counts = (window == last_tokens).sum(dim=1)
-        repeat_ratios = repeat_counts.float() / window_size
-
-        mask = repeat_ratios > threshold
-        scores[mask, last_tokens[mask].squeeze(-1)] = float("-inf")
-        return scores
-
 class StepAudioTTS:
     """
     Step Audio TTS wrapper for voice cloning and audio editing tasks
+    Uses vLLM for high-performance inference
     """
 
     def __init__(
@@ -61,23 +40,38 @@ class StepAudioTTS:
         audio_tokenizer,
         model_source=ModelSource.AUTO,
         tts_model_id=None,
-        quantization_config=None,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda"
+        quantization=None,
+        tensor_parallel_size=1,
+        gpu_memory_utilization=0.5,
+        max_model_len=8192,
+        enforce_eager=False,
+        dtype="bfloat16",
+        kv_cache_dtype=None,
+        max_num_seqs=None,
+        max_num_batched_tokens=None,
+        cosyvoice_dtype="float32",
+        cosyvoice_cuda_graph=True
     ):
         """
-        Initialize StepAudioTTS
+        Initialize StepAudioTTS with vLLM
 
         Args:
             model_path: Model path
             audio_tokenizer: Audio tokenizer for wav2token processing
             model_source: Model source (auto/local/modelscope/huggingface)
             tts_model_id: TTS model ID, if None use model_path
-            quantization_config: Quantization configuration ('int4', 'int8', or None)
-            torch_dtype: PyTorch data type for model weights (default: torch.bfloat16)
-            device_map: Device mapping for model (default: "cuda")
+            quantization: Quantization method ('awq', 'gptq', 'fp8', or None)
+            tensor_parallel_size: Number of GPUs for tensor parallelism
+            gpu_memory_utilization: GPU memory utilization ratio (0.0-1.0)
+            max_model_len: Maximum sequence length, affects KV cache size
+            enforce_eager: Disable CUDA Graphs to save GPU memory
+            dtype: Data type ('float16', 'bfloat16')
+            kv_cache_dtype: KV cache dtype ('fp8_e5m2' for 50% memory reduction)
+            max_num_seqs: Max concurrent sequences (lower = less memory)
+            max_num_batched_tokens: Max tokens per batch (lower = less activation memory)
+            cosyvoice_dtype: CosyVoice vocoder dtype ('float32', 'bfloat16', 'float16')
+            cosyvoice_cuda_graph: Enable CUDA Graph for CosyVoice (default: True)
         """
-        # Determine model ID or path to load
         if tts_model_id is None:
             tts_model_id = model_path
 
@@ -85,32 +79,50 @@ class StepAudioTTS:
         logger.info(f"   - model_source: {model_source}")
         logger.info(f"   - model_path: {model_path}")
         logger.info(f"   - tts_model_id: {tts_model_id}")
+        logger.info(f"   - quantization: {quantization}")
+        logger.info(f"   - tensor_parallel_size: {tensor_parallel_size}")
 
         self.audio_tokenizer = audio_tokenizer
 
-        # Load LLM and tokenizer using model_loader
+        # Load LLM using vLLM
         try:
-            self.llm, self.tokenizer, model_path = model_loader.load_transformers_model(
+            self.llm, self.tokenizer, resolved_path = model_loader.load_model(
                 tts_model_id,
                 source=model_source,
-                quantization_config=quantization_config,
-                torch_dtype=torch_dtype,
-                device_map=device_map
+                quantization=quantization,
+                tensor_parallel_size=tensor_parallel_size,
+                gpu_memory_utilization=gpu_memory_utilization,
+                max_model_len=max_model_len,
+                enforce_eager=enforce_eager,
+                dtype=dtype,
+                trust_remote_code=True,
+                kv_cache_dtype=kv_cache_dtype,
+                max_num_seqs=max_num_seqs,
+                max_num_batched_tokens=max_num_batched_tokens
             )
-            logger.info(f"✅ Successfully loaded LLM and tokenizer: {tts_model_id}")
+            logger.info(f"✅ Successfully loaded vLLM model: {tts_model_id}")
         except Exception as e:
             logger.error(f"❌ Failed to load model: {e}")
             raise
 
-        # Load CosyVoice model (usually local path)
+        # Load CosyVoice model
+        # Map dtype string to torch dtype
+        cosyvoice_dtype_map = {
+            "float32": torch.float32,
+            "bfloat16": torch.bfloat16,
+            "float16": torch.float16,
+        }
+        cosy_dtype = cosyvoice_dtype_map.get(cosyvoice_dtype, torch.float32)
+        logger.info(f"🎤 Loading CosyVoice with dtype={cosyvoice_dtype}, cuda_graph={cosyvoice_cuda_graph}")
+        
         self.cosy_model = CosyVoice(
-            os.path.join(model_path, "CosyVoice-300M-25Hz")
+            os.path.join(resolved_path, "CosyVoice-300M-25Hz"),
+            dtype=cosy_dtype,
+            enable_cuda_graph=cosyvoice_cuda_graph
         )
-
-        # Print final GPU memory usage after all models are loaded
         logger.info("🎤 CosyVoice model loaded successfully")
 
-        # Use system prompts from config module
+        # System prompts
         self.edit_clone_sys_prompt_tpl = AUDIO_EDIT_CLONE_SYSTEM_PROMPT_TPL
         self.edit_sys_prompt = AUDIO_EDIT_SYSTEM_PROMPT
 
@@ -148,14 +160,7 @@ class StepAudioTTS:
                 prompt_wav_tokens,
             )
 
-            output_ids = self.llm.generate(
-                torch.tensor([token_ids]).to(torch.long).to("cuda"),
-                max_length=8192,
-                temperature=0.7,
-                do_sample=True,
-                logits_processor=LogitsProcessorList([RepetitionAwareLogitsProcessor()]),
-            )
-            output_ids = output_ids[:, len(token_ids) : -1]  # skip eos token
+            output_ids = self._generate(token_ids, max_tokens=8192 - len(token_ids))
             logger.debug("Voice cloning generation completed")
             vq0206_codes_vocoder = torch.tensor([vq0206_codes], dtype=torch.long) - 65536
             return (
@@ -193,17 +198,15 @@ class StepAudioTTS:
             Tuple[torch.Tensor, int]: Edited audio tensor and sample rate
         """
         try:
-            logger.debug(f"Starting audio editing: {edit_type} - {edit_info}")            
+            logger.debug(f"Starting audio editing: {edit_type} - {edit_info}")
             vq0206_codes, vq02_codes_ori, vq06_codes_ori, speech_feat, _, speech_embedding = (
                 self.preprocess_prompt_wav(input_audio_path)
             )
             audio_tokens = self.audio_tokenizer.merge_vq0206_to_token_str(
                 vq02_codes_ori, vq06_codes_ori
             )
-            # Build instruction prefix based on edit type
             instruct_prefix = self._build_audio_edit_instruction(audio_text, edit_type, edit_info, text)
 
-            # Encode the complete prompt to token sequence
             prompt_tokens = self._encode_audio_edit_prompt(
                 self.edit_sys_prompt, instruct_prefix, audio_tokens
             )
@@ -211,14 +214,7 @@ class StepAudioTTS:
             logger.debug(f"Edit instruction: {instruct_prefix}")
             logger.debug(f"Encoded prompt length: {len(prompt_tokens)}")
 
-            output_ids = self.llm.generate(
-                torch.tensor([prompt_tokens]).to(torch.long).to("cuda"),
-                max_length=8192,
-                temperature=0.7,
-                do_sample=True,
-                logits_processor=LogitsProcessorList([RepetitionAwareLogitsProcessor()]),
-            )
-            output_ids = output_ids[:, len(prompt_tokens) : -1]  # skip eos token
+            output_ids = self._generate(prompt_tokens, max_tokens=8192 - len(prompt_tokens))
             vq0206_codes_vocoder = torch.tensor([vq0206_codes], dtype=torch.long) - 65536
             logger.debug("Audio editing generation completed")
             return (
@@ -240,26 +236,14 @@ class StepAudioTTS:
         edit_type: str,
         edit_info: Optional[str] = None,
         text: Optional[str] = None
-        ) -> str:
-        """
-        Build audio editing instruction based on request
-
-        Args:
-            audio_text: Text content of input audio
-            edit_type: Type of edit
-            edit_info: Specific edit information
-            text: Target text for editing
-
-        Returns:
-            str: Instruction prefix
-        """
-
+    ) -> str:
+        """Build audio editing instruction based on request"""
         audio_text = audio_text.strip() if audio_text else ""
         if edit_type in {"emotion", "speed"}:
             if edit_info == "remove":
                 instruct_prefix = f"Remove any emotion in the following audio and the reference text is: {audio_text}\n"
             else:
-                instruct_prefix=f"Make the following audio more {edit_info}. The text corresponding to the audio is: {audio_text}\n"
+                instruct_prefix = f"Make the following audio more {edit_info}. The text corresponding to the audio is: {audio_text}\n"
         elif edit_type == "style":
             if edit_info == "remove":
                 instruct_prefix = f"Remove any speaking styles in the following audio and the reference text is: {audio_text}\n"
@@ -276,23 +260,64 @@ class StepAudioTTS:
                 status_code=HTTPStatus.BAD_REQUEST,
                 detail=f"Unsupported edit_type: {edit_type}",
             )
-
         return instruct_prefix
+
+    def _generate(self, token_ids: list[int], max_tokens: int = 4096, temperature: float = 0.7) -> torch.Tensor:
+        """
+        Generate output tokens using vLLM
+
+        Args:
+            token_ids: Input token IDs (including audio tokens 65536+)
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+
+        Returns:
+            torch.Tensor: Generated token IDs (only the generated part, not input)
+        """
+        # Debug: analyze INPUT token distribution
+        audio_in = sum(1 for t in token_ids if 65536 <= t < 67584)
+        text_in = sum(1 for t in token_ids if t < 65536)
+        other_in = sum(1 for t in token_ids if t >= 67584)
+        logger.info(f"INPUT tokens: total={len(token_ids)}, audio(65536-67583)={audio_in}, text(<65536)={text_in}, other(>=67584)={other_in}")
+        if token_ids:
+            logger.info(f"INPUT range: min={min(token_ids)}, max={max(token_ids)}")
+        
+        sampling_params = SamplingParams(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            skip_special_tokens=False,
+        )
+        
+        # Use prompt_token_ids directly instead of decoding to text
+        # This preserves audio tokens (65536+) which would be corrupted by decode
+        prompt = {"prompt_token_ids": token_ids}
+        outputs = self.llm.generate([prompt], sampling_params)
+
+        # Extract output token IDs (vLLM only returns generated tokens, not input)
+        output_token_ids = list(outputs[0].outputs[0].token_ids)
+        
+        # Debug: analyze token distribution
+        if output_token_ids:
+            min_tok = min(output_token_ids)
+            max_tok = max(output_token_ids)
+            audio_count = sum(1 for t in output_token_ids if 65536 <= t < 67584)
+            text_count = sum(1 for t in output_token_ids if t < 65536)
+            other_count = sum(1 for t in output_token_ids if t >= 67584)
+            logger.info(f"Generated {len(output_token_ids)} tokens: min={min_tok}, max={max_tok}, "
+                       f"audio(65536-67583)={audio_count}, text(<65536)={text_count}, other(>=67584)={other_count}")
+        
+        # Remove eos token if present
+        if len(output_token_ids) > 0 and output_token_ids[-1] == self.tokenizer.eos_token_id:
+            output_token_ids = output_token_ids[:-1]
+        
+        output_ids = torch.tensor([output_token_ids], dtype=torch.long)
+
+        return output_ids
 
     def _encode_audio_edit_prompt(
         self, sys_prompt: str, instruct_prefix: str, audio_token_str: str
     ) -> list[int]:
-        """
-        Encode audio edit prompt to token sequence
-
-        Args:
-            sys_prompt: System prompt
-            instruct_prefix: Instruction prefix
-            audio_token_str: Audio tokens as string
-
-        Returns:
-            list[int]: Encoded token sequence
-        """
+        """Encode audio edit prompt to token sequence"""
         audio_token_str = audio_token_str.strip()
         history = [1]
         sys_tokens = self.tokenizer.encode(f"system\n{sys_prompt}")
@@ -304,7 +329,7 @@ class StepAudioTTS:
         )
         history.extend([4] + qrole_toks + human_turn_toks + [3] + [4] + arole_toks)
         return history
-    
+
     def _encode_audio_edit_clone_prompt(
         self, text: str, prompt_text: str, prompt_speaker: str, prompt_wav_tokens: str
     ):
@@ -319,9 +344,9 @@ class StepAudioTTS:
         history.extend([4] + sys_tokens + [3])
 
         _prefix_tokens = self.tokenizer.encode("\n")
-        
+
         target_token_encode = self.tokenizer.encode("\n" + text)
-        target_tokens = target_token_encode[len(_prefix_tokens) :]
+        target_tokens = target_token_encode[len(_prefix_tokens):]
 
         qrole_toks = self.tokenizer.encode("human\n")
         arole_toks = self.tokenizer.encode("assistant\n")
@@ -336,7 +361,6 @@ class StepAudioTTS:
         )
         return history
 
-
     def detect_instruction_name(self, text):
         instruction_name = ""
         match_group = re.match(r"^([（\(][^\(\)()]*[）\)]).*$", text, re.DOTALL)
@@ -346,15 +370,7 @@ class StepAudioTTS:
         return instruction_name
 
     def process_audio_file(self, audio_path: str) -> Tuple[any, int]:
-        """
-        Process audio file and return numpy array and sample rate
-
-        Args:
-            audio_path: Path to audio file
-
-        Returns:
-            Tuple[numpy.ndarray, int]: Audio data and sample rate
-        """
+        """Process audio file and return numpy array and sample rate"""
         try:
             audio_data, sample_rate = librosa.load(audio_path)
             logger.debug(f"Audio file processed successfully: {audio_path}")
@@ -363,15 +379,15 @@ class StepAudioTTS:
             logger.error(f"Failed to process audio file: {e}")
             raise
 
-    def preprocess_prompt_wav(self, prompt_wav_path : str):
+    def preprocess_prompt_wav(self, prompt_wav_path: str):
         prompt_wav, prompt_wav_sr = torchaudio.load(prompt_wav_path)
         if prompt_wav.shape[0] > 1:
-            prompt_wav = prompt_wav.mean(dim=0, keepdim=True)  # 将多通道音频转换为单通道
+            prompt_wav = prompt_wav.mean(dim=0, keepdim=True)
 
         # volume-normalize avoid clipping
         norm = torch.max(torch.abs(prompt_wav), dim=1, keepdim=True)[0]
-        if norm > 0.6: # hard code;  max absolute value is 0.6
-            prompt_wav = prompt_wav / norm * 0.6 
+        if norm > 0.6:
+            prompt_wav = prompt_wav / norm * 0.6
 
         speech_feat, speech_feat_len = self.cosy_model.frontend.extract_speech_feat(
             prompt_wav, prompt_wav_sr
@@ -388,7 +404,7 @@ class StepAudioTTS:
             speech_feat_len,
             speech_embedding,
         )
-        
+
     def generate_clone_voice_id(self, prompt_text, prompt_wav):
         hasher = hashlib.sha256()
         hasher.update(prompt_text.encode('utf-8'))
@@ -400,4 +416,3 @@ class StepAudioTTS:
         hasher.update(audio_sample.tobytes())
         voice_hash = hasher.hexdigest()[:16]
         return f"clone_{voice_hash}"
-    

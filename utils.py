@@ -8,13 +8,16 @@ import os
 import threading
 import torch
 import torchaudio
+import soundfile as sf
 import sox
 import tempfile
 
 
 def encode_wav(wav, sr, rep_format="wav"):
     with io.BytesIO() as wavio:
-        torchaudio.save(wavio, wav, sr, format=rep_format)
+        # Use soundfile instead of torchaudio.save (TorchCodec doesn't support BytesIO)
+        wav_np = wav.squeeze(0).cpu().numpy() if wav.dim() > 1 else wav.cpu().numpy()
+        sf.write(wavio, wav_np, sr, format=rep_format.upper())
         audio_bytes = wavio.getvalue()
         encoded_wav = base64.b64encode(audio_bytes).decode("ascii")
     return encoded_wav
