@@ -98,7 +98,7 @@ class StepAudioTTS:
                 trust_remote_code=True,
                 kv_cache_dtype=kv_cache_dtype,
                 max_num_seqs=max_num_seqs,
-                max_num_batched_tokens=max_num_batched_tokens
+                max_num_batched_tokens=max_num_batched_tokens,
             )
             logger.info(f"✅ Successfully loaded vLLM model: {tts_model_id}")
         except Exception as e:
@@ -145,11 +145,12 @@ class StepAudioTTS:
         """
         try:
             logger.debug(f"Starting voice cloning: {prompt_wav_path}")
-            prompt_wav, _ = torchaudio.load(prompt_wav_path)
+            # prompt_wav, _ = torchaudio.load(prompt_wav_path)
             vq0206_codes, vq02_codes_ori, vq06_codes_ori, speech_feat, _, speech_embedding = (
                 self.preprocess_prompt_wav(prompt_wav_path)
             )
-            prompt_speaker = self.generate_clone_voice_id(prompt_text, prompt_wav)
+            # prompt_speaker = self.generate_clone_voice_id(prompt_text, prompt_wav)
+            prompt_speaker = "debug"
             prompt_wav_tokens = self.audio_tokenizer.merge_vq0206_to_token_str(
                 vq02_codes_ori, vq06_codes_ori
             )
@@ -159,7 +160,6 @@ class StepAudioTTS:
                 prompt_speaker,
                 prompt_wav_tokens,
             )
-
             output_ids = self._generate(token_ids, max_tokens=8192 - len(token_ids))
             logger.debug("Voice cloning generation completed")
             vq0206_codes_vocoder = torch.tensor([vq0206_codes], dtype=torch.long) - 65536
@@ -291,7 +291,7 @@ class StepAudioTTS:
         # Use prompt_token_ids directly instead of decoding to text
         # This preserves audio tokens (65536+) which would be corrupted by decode
         prompt = {"prompt_token_ids": token_ids}
-        outputs = self.llm.generate([prompt], sampling_params)
+        outputs = self.llm.generate([prompt], sampling_params, use_tqdm=False)
 
         # Extract output token IDs (vLLM only returns generated tokens, not input)
         output_token_ids = list(outputs[0].outputs[0].token_ids)
@@ -307,10 +307,10 @@ class StepAudioTTS:
                        f"audio(65536-67583)={audio_count}, text(<65536)={text_count}, other(>=67584)={other_count}")
         
         # Remove eos token if present
-        if len(output_token_ids) > 0 and output_token_ids[-1] == self.tokenizer.eos_token_id:
+        if len(output_token_ids) > 0 and output_token_ids[-1] == 3: # <|EOT|>
             output_token_ids = output_token_ids[:-1]
         
-        output_ids = torch.tensor([output_token_ids], dtype=torch.long)
+        output_ids = torch.tensor(output_token_ids, dtype=torch.long)
 
         return output_ids
 
@@ -319,15 +319,31 @@ class StepAudioTTS:
     ) -> list[int]:
         """Encode audio edit prompt to token sequence"""
         audio_token_str = audio_token_str.strip()
+        _prefix_tokens = self.tokenizer.encode("\n")
         history = [1]
-        sys_tokens = self.tokenizer.encode(f"system\n{sys_prompt}")
+        sys_tokens = self.tokenizer.encode("\n" + f" system\n{sys_prompt}")
+        sys_tokens = sys_tokens[len(_prefix_tokens):]
         history.extend([4] + sys_tokens + [3])
-        qrole_toks = self.tokenizer.encode("human\n")
-        arole_toks = self.tokenizer.encode("assistant\n")
+
+        qrole_toks = self.tokenizer.encode("\n" + " human\n")
+        qrole_toks = qrole_toks[len(_prefix_tokens):]
+
+        arole_toks = self.tokenizer.encode("\n" + " assistant\n")
+        arole_toks = arole_toks[len(_prefix_tokens):]
+
         human_turn_toks = self.tokenizer.encode(
-            f"{instruct_prefix}\n{audio_token_str}\n"
+            "\n" + f"{instruct_prefix}\n{audio_token_str}\n"
         )
-        history.extend([4] + qrole_toks + human_turn_toks + [3] + [4] + arole_toks)
+        human_turn_toks = human_turn_toks[len(_prefix_tokens):]
+
+        history.extend(
+            [4] 
+            + qrole_toks 
+            + human_turn_toks 
+            + [3] 
+            + [4] 
+            + arole_toks
+        )
         return history
 
     def _encode_audio_edit_clone_prompt(
@@ -338,18 +354,22 @@ class StepAudioTTS:
             prompt_text=prompt_text,
             prompt_wav_tokens=prompt_wav_tokens
         )
-        sys_tokens = self.tokenizer.encode(f"system\n{prompt}")
+        _prefix_tokens = self.tokenizer.encode("\n")
+
+        sys_tokens = self.tokenizer.encode("\n" + f" system\n{prompt}")
+        sys_tokens = sys_tokens[len(_prefix_tokens):]
 
         history = [1]
         history.extend([4] + sys_tokens + [3])
 
-        _prefix_tokens = self.tokenizer.encode("\n")
-
         target_token_encode = self.tokenizer.encode("\n" + text)
         target_tokens = target_token_encode[len(_prefix_tokens):]
 
-        qrole_toks = self.tokenizer.encode("human\n")
-        arole_toks = self.tokenizer.encode("assistant\n")
+        qrole_toks = self.tokenizer.encode("\n" + " human\n")
+        qrole_toks = qrole_toks[len(_prefix_tokens):]
+
+        arole_toks = self.tokenizer.encode("\n" + " assistant\n")
+        arole_toks = arole_toks[len(_prefix_tokens):]
 
         history.extend(
             [4]
