@@ -399,6 +399,7 @@ For more examples, see [demo page](https://stepaudiollm.github.io/step-audio-edi
 | Models   | 🤗 Hugging Face | ModelScope |
 |-------|-------|-------|
 | Step-Audio-EditX | [stepfun-ai/Step-Audio-EditX](https://huggingface.co/stepfun-ai/Step-Audio-EditX) | [stepfun-ai/Step-Audio-EditX](https://modelscope.cn/models/stepfun-ai/Step-Audio-EditX) |
+| Step-Audio-EditX | [stepfun-ai/Step-Audio-EditX-AWQ-4bit](https://huggingface.co/stepfun-ai/Step-Audio-EditX-AWQ-4bit) | [stepfun-ai/Step-Audio-EditX-AWQ-4bit](https://modelscope.cn/models/stepfun-ai/Step-Audio-EditX-AWQ-4bit) |
 | Step-Audio-Tokenizer | [stepfun-ai/Step-Audio-Tokenizer](https://huggingface.co/stepfun-ai/Step-Audio-Tokenizer) | [stepfun-ai/Step-Audio-Tokenizer](https://modelscope.cn/models/stepfun-ai/Step-Audio-Tokenizer) |
 
 
@@ -430,6 +431,7 @@ source .venv/bin/activate
 git lfs install
 git clone https://huggingface.co/stepfun-ai/Step-Audio-Tokenizer
 git clone https://huggingface.co/stepfun-ai/Step-Audio-EditX
+git clone https://huggingface.co/stepfun-ai/Step-Audio-EditX-AWQ-4bit/
 
 ```
 
