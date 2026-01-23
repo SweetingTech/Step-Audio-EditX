@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
@@ -12,22 +12,30 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get install --reinstall ca-certificates && update-ca-certificates \
+RUN apt-get update \
+    && apt-get install --reinstall -y ca-certificates && update-ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# 安装 Python 3.12 (pyproject.toml 要求 >=3.12,<3.14)
 RUN add-apt-repository -y 'ppa:deadsnakes/ppa' && apt update
-RUN apt install python3.10 python3.10-dev python3.10-distutils python3.10-venv -y \
+RUN apt install python3.12 python3.12-dev python3.12-venv -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget -qO- https://bootstrap.pypa.io/get-pip.py | python3.10
-RUN ln -s /usr/bin/python3.10 /usr/bin/python
-RUN pip uninstall -y Pillow && pip install pillow
+RUN ln -sf /usr/bin/python3.12 /usr/bin/python \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3
 
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install -r /tmp/requirements.txt
-RUN pip3 install onnxruntime-gpu==1.17.0  --index-url=https://pkgs.dev.azure.com/onnxruntime/onnxruntime/_packaging/onnxruntime-cuda-12/pypi/simple --force-reinstall --no-deps
+# 安装 uv 包管理器
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
-CMD ["python3", "app.py", "--model-path", "/model", "--model-source", "local"]
+
+# 复制依赖配置文件
+COPY pyproject.toml uv.lock ./
+
+# 使用 uv 安装依赖
+RUN uv sync
+
+CMD ["uv", "run", "python", "app.py", "--model-path", "/model", "--model-source", "local"]

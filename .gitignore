@@ -2,3 +2,6 @@ __pycache__/
 output/
 quantization/*.json
 sparse_logs/
+.venv/
+*.log
+.python-version

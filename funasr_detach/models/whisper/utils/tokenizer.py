@@ -292,7 +292,7 @@ def build_tokenizer(name: str = "gpt2", resource_path: str = None):
         path = os.path.join(resource_path, name)
     else:
         path = os.path.join(os.path.dirname(__file__), "assets", name)
-    tokenizer = GPT2TokenizerFast.from_pretrained(path)
+    tokenizer = GPT2TokenizerFast.from_pretrained(path, trust_remote_code=True)
 
     specials = [
         "<|startoftranscript|>",

@@ -1,9 +1,13 @@
-import gradio as gr
 import os
+# Force TRITON_ATTN backend for Step1 model (required for alibi_sqrt support)
+os.environ["VLLM_ATTENTION_BACKEND"] = "TRITON_ATTN"
+
+import gradio as gr
 import argparse
 import torch
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 from datetime import datetime
 import torchaudio
 import librosa
@@ -69,26 +73,24 @@ class EditxTab:
     def generate_clone(self, prompt_text_input, prompt_audio_input, generated_text, edit_type, edit_info, state):
         """Generate cloned audio"""
         self.logger.info("Starting voice cloning process")
-        state['history_audio'] = []
-        state['history_messages'] = []
 
         # Input validation
         if not prompt_text_input or prompt_text_input.strip() == "":
             error_msg = "[Error] Uploaded text cannot be empty."
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
         if not prompt_audio_input:
             error_msg = "[Error] Uploaded audio cannot be empty."
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
         if not generated_text or generated_text.strip() == "":
             error_msg = "[Error] Clone content cannot be empty."
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
         if edit_type != "clone":
             error_msg = "[Error] CLONE button must use clone task."
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
 
         try:
             # Use common_tts_engine for cloning
@@ -124,12 +126,12 @@ class EditxTab:
             else:
                 error_msg = "[Error] Clone failed"
                 self.logger.error(error_msg)
-                return [{"role": "user", "content": error_msg}], state
+                return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
 
         except Exception as e:
             error_msg = f"[Error] Clone failed: {str(e)}"
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
         
     def generate_edit(self, prompt_text_input, prompt_audio_input, generated_text, edit_type, edit_info, state):
         """Generate edited audio"""
@@ -139,7 +141,7 @@ class EditxTab:
         if not prompt_audio_input:
             error_msg = "[Error] Uploaded audio cannot be empty."
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
 
         try:
             # Determine which audio to use
@@ -196,12 +198,12 @@ class EditxTab:
             else:
                 error_msg = "[Error] Edit failed"
                 self.logger.error(error_msg)
-                return [{"role": "user", "content": error_msg}], state
+                return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
 
         except Exception as e:
             error_msg = f"[Error] Edit failed: {str(e)}"
             self.logger.error(error_msg)
-            return [{"role": "user", "content": error_msg}], state
+            return self.history_messages_to_show(state["history_messages"]) + [{"role": "user", "content": error_msg}], state
 
     def clear_history(self, state):
         """Clear conversation history"""
@@ -234,7 +236,7 @@ class EditxTab:
                     with gr.Row():
                         self.edit_type = gr.Dropdown(label="Task", choices=self.edit_type_list, value="clone")
                         self.edit_info = gr.Dropdown(label="Sub-task", choices=[], value=None)
-                    self.chat_box = gr.Chatbot(label="History", type="messages", height=480*1)
+                    self.chat_box = gr.Chatbot(label="History", height=480)
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
@@ -366,10 +368,10 @@ if __name__ == "__main__":
         help="Model source: auto (detect automatically), local, modelscope, or huggingface"
     )
     parser.add_argument(
-        "--tokenizer-model-id",
+        "--tokenizer-path",
         type=str,
-        default="dengcunqin/speech_paraformer-large_asr_nat-zh-cantonese-en-16k-vocab8501-online",
-        help="Tokenizer model ID for online loading"
+        default=None,
+        help="Path to Step-Audio-Tokenizer directory. If not specified, auto-detects sibling directory"
     )
     parser.add_argument(
         "--tts-model-id",
@@ -381,30 +383,79 @@ if __name__ == "__main__":
         "--quantization",
         type=str,
         default=None,
-        choices=["int4", "int8", "awq-4bit"],
-        help="Enable quantization for the TTS model to reduce memory usage."
-             "Choices: int4 (online), int8 (online), awq-4bit (AWQ 4-bit quantization)."
-             "When quantization is enabled, data types are handled automatically by the quantization library."
+        choices=["awq", "gptq", "fp8"],
+        help="Enable quantization for vLLM: awq, gptq, or fp8"
     )
     parser.add_argument(
-        "--torch-dtype",
+        "--tensor-parallel-size",
+        type=int,
+        default=1,
+        help="Number of GPUs for tensor parallelism"
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=0.5,
+        help="GPU memory utilization ratio 0.0-1.0 (default: 0.5)"
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=3072,
+        help="Maximum model sequence length, affects KV cache size (default: 8192)"
+    )
+    parser.add_argument(
+        "--dtype",
         type=str,
         default="bfloat16",
-        choices=["float16", "bfloat16", "float32"],
-        help="PyTorch data type for model operations. This setting only applies when quantization is disabled. "
-             "When quantization is enabled, data types are managed automatically."
+        choices=["float16", "bfloat16"],
+        help="Data type for model (default: bfloat16)"
     )
     parser.add_argument(
-        "--device-map",
+        "--enforce-eager",
+        action="store_true",
+        help="Disable CUDA Graphs to save ~0.5GB GPU memory (slower inference)"
+    )
+    parser.add_argument(
+        "--kv-cache-dtype",
         type=str,
-        default="cuda",
-        help="Device mapping for model loading (default: cuda)"
+        default=None,
+        choices=["auto", "fp8", "fp8_e5m2", "fp8_e4m3"],
+        help="KV cache data type: fp8_e5m2 reduces KV cache memory by ~50%% (default: auto, uses model dtype)"
+    )
+    parser.add_argument(
+        "--max-num-seqs",
+        type=int,
+        default=None,
+        help="Maximum number of concurrent sequences (default: 256, lower = less memory)"
+    )
+    parser.add_argument(
+        "--max-num-batched-tokens",
+        type=int,
+        default=None,
+        help="Maximum number of batched tokens per iteration (default: max_model_len, lower = less activation memory)"
     )
     parser.add_argument(
         "--enable-auto-transcribe",
         action="store_true",
         help="Enable automatic audio transcription when uploading audio files (default: disabled)"
     )
+    
+    # CosyVoice vocoder parameters
+    parser.add_argument(
+        "--cosyvoice-dtype",
+        type=str,
+        default="float32",
+        choices=["float32", "bfloat16", "float16"],
+        help="CosyVoice vocoder dtype: bfloat16 reduces memory by ~50%% (default: float32)"
+    )
+    parser.add_argument(
+        "--no-cosyvoice-cuda-graph",
+        dest="cosyvoice_cuda_graph",
+        action="store_false",
+        help="Disable CUDA Graph for CosyVoice vocoder (saves memory but slower)"
+    )
+    parser.set_defaults(cosyvoice_cuda_graph=True)
 
     args = parser.parse_args()
 
@@ -417,43 +468,63 @@ if __name__ == "__main__":
     }
     model_source = source_mapping[args.model_source]
 
-    # Map torch dtype string to actual torch dtype
-    dtype_mapping = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32
-    }
-    torch_dtype = dtype_mapping[args.torch_dtype]
+    # Determine tokenizer path
+    if args.tokenizer_path:
+        tokenizer_base_path = args.tokenizer_path
+    else:
+        # Try sibling directory first, then subdirectory
+        parent_dir = os.path.dirname(args.model_path)
+        sibling_tokenizer = os.path.join(parent_dir, "Step-Audio-Tokenizer")
+        sub_tokenizer = os.path.join(args.model_path, "Step-Audio-Tokenizer")
+        
+        # For HuggingFace/ModelScope paths (e.g., "stepfun-ai/xxx"), always use sibling path
+        # since os.path.exists() only works for local filesystem
+        if model_source in [ModelSource.HUGGINGFACE, ModelSource.MODELSCOPE]:
+            tokenizer_base_path = sibling_tokenizer
+        elif os.path.exists(sibling_tokenizer):
+            tokenizer_base_path = sibling_tokenizer
+        else:
+            tokenizer_base_path = sub_tokenizer
 
-    logger.info(f"Loading models with source: {args.model_source}")
-    logger.info(f"Model path: {args.model_path}")
-    logger.info(f"Tokenizer model ID: {args.tokenizer_model_id}")
-    logger.info(f"Torch dtype: {args.torch_dtype}")
-    logger.info(f"Device map: {args.device_map}")
+    logger.info(f"🚀 Loading models with vLLM backend")
+    logger.info(f"   - Model source: {args.model_source}")
+    logger.info(f"   - Model path: {args.model_path}")
+    logger.info(f"   - Tokenizer path: {tokenizer_base_path}")
+    logger.info(f"   - dtype: {args.dtype}")
+    logger.info(f"   - Tensor parallel size: {args.tensor_parallel_size}")
+    logger.info(f"   - GPU memory utilization: {args.gpu_memory_utilization}")
+    logger.info(f"   - Max model length: {args.max_model_len}")
     if args.tts_model_id:
-        logger.info(f"TTS model ID: {args.tts_model_id}")
+        logger.info(f"   - TTS model ID: {args.tts_model_id}")
     if args.quantization:
-        logger.info(f"🔧 {args.quantization.upper()} quantization enabled")
+        logger.info(f"   - Quantization: {args.quantization}")
 
     # Initialize models
     try:
-        # Load StepAudioTokenizer
+        # Load StepAudioTokenizer (uses default funasr_model_id from tokenizer.py)
         encoder = StepAudioTokenizer(
-            os.path.join(args.model_path, "Step-Audio-Tokenizer"),
-            model_source=model_source,
-            funasr_model_id=args.tokenizer_model_id
+            tokenizer_base_path,
+            model_source=model_source
         )
         logger.info("✓ StepAudioTokenizer loaded successfully")
         
-        # Initialize common TTS engine directly
+        # Initialize TTS engine with vLLM
         common_tts_engine = StepAudioTTS(
-            os.path.join(args.model_path, "Step-Audio-EditX-AWQ-4bit" if args.quantization == "awq-4bit" else "Step-Audio-EditX"),
+            args.model_path,
             encoder,
             model_source=model_source,
             tts_model_id=args.tts_model_id,
-            quantization_config=args.quantization,
-            torch_dtype=torch_dtype,
-            device_map=args.device_map
+            quantization=args.quantization,
+            tensor_parallel_size=args.tensor_parallel_size,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            max_model_len=args.max_model_len,
+            enforce_eager=args.enforce_eager,
+            dtype=args.dtype,
+            kv_cache_dtype=args.kv_cache_dtype,
+            max_num_seqs=args.max_num_seqs,
+            max_num_batched_tokens=args.max_num_batched_tokens,
+            cosyvoice_dtype=args.cosyvoice_dtype,
+            cosyvoice_cuda_graph=args.cosyvoice_cuda_graph
         )
         logger.info("✓ StepCommonAudioTTS loaded successfully")
         

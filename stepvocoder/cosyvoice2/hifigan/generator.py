@@ -364,6 +364,7 @@ class SourceModuleHnNSF2(torch.nn.Module):
         # to produce sine waveforms
         self.l_sin_gen = SineGen2(sampling_rate, upsample_scale, harmonic_num,
                                   sine_amp, add_noise_std, voiced_threshod)
+        self.l_sin_gen = self.l_sin_gen.to(torch.bfloat16)
 
         # to merge source harmonics into a single excitation
         self.l_linear = torch.nn.Linear(harmonic_num + 1, 1)
@@ -379,6 +380,7 @@ class SourceModuleHnNSF2(torch.nn.Module):
         # source for harmonic branch
         with torch.no_grad():
             sine_wavs, uv, _ = self.l_sin_gen(x)
+            sine_wavs = sine_wavs.to(x.dtype)
         sine_merge = self.l_tanh(self.l_linear(sine_wavs))
 
         # source for noise branch, in the same shape as uv
@@ -423,8 +425,7 @@ class HiFTGenerator(nn.Module):
         self.num_kernels = len(resblock_kernel_sizes)
         self.num_upsamples = len(upsample_rates)
         # NOTE in CosyVoice2, we use the original SourceModuleHnNSF implementation
-        # this_SourceModuleHnNSF = SourceModuleHnNSF if self.sampling_rate == 22050 else SourceModuleHnNSF2
-        this_SourceModuleHnNSF = SourceModuleHnNSF2 # WBY
+        this_SourceModuleHnNSF = SourceModuleHnNSF2
         self.m_source = this_SourceModuleHnNSF(
             sampling_rate=sampling_rate,
             upsample_scale=np.prod(upsample_rates) * istft_params["hop_len"],

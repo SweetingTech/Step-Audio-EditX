@@ -12,6 +12,9 @@
 </div>
 
 ## 🔥🔥🔥 News!!！
+* Jan 23, 2026: 🌟 Training and inference for vLLM are now supported. Thanks to the vLLM team!
+* Jan 23, 2026: 💻 We release the GRPO training code.
+* Jan 23, 2026: 🧩 New Model Release: Now supporting more paralinguistic tags.
 * Nov 28, 2025: 🚀 New Model Release: Now supporting **`Japanese`** and **`Korean`** languages.
 * Nov 23, 2025: 📊 [Step-Audio-Edit-Benchmark](https://github.com/stepfun-ai/Step-Audio-Edit-Benchmark) Released!
 * Nov 19, 2025: ⚙️ We release a **new version** of our model, which **supports polyphonic pronunciation control** and improves the performance of emotion, speaking style, and paralinguistic editing.
@@ -29,14 +32,15 @@ We are open-sourcing Step-Audio-EditX, a powerful **3B-parameter** LLM-based **R
 - [x] Model Checkpoints
   - [x] Step-Audio-Tokenizer
   - [x] Step-Audio-EditX
-  - [ ] Step-Audio-EditX-Int4
+  - [x] Step-Audio-EditX-Int4
 - [ ] Training Code
+  - [x] GRPO training
   - [ ] SFT training
   - [ ] PPO training
 - [ ] ⏳ Feature Support Plan
   - [ ] Editing
     - [x] Polyphone pronunciation control
-    - [ ] More paralinguistic tags ([Cough, Crying, Stress, etc.])
+    - [x] More paralinguistic tags ([Cough, Crying, Stress, etc.])
     - [ ] Filler word removal
   - [ ] Other Languages
     - [x] Japanese, Korean
@@ -211,35 +215,81 @@ We are open-sourcing Step-Audio-EditX, a powerful **3B-parameter** LLM-based **R
   <tr>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle; text-align:center;" align="center">paralinguistic</td>
-    <td align="center"><b>Breathing</b></td>
-    <td align="center">Breathing sound</td>
-    <td align="center"><b>Laughter</b></td>
-    <td align="center">Laughter or laughing sound</td>
-  </tr>
-  <tr>
-    <td align="center"><b>Uhm</b></td>
-    <td align="center">Hesitation sound: "Uhm"</td>
-    <td align="center"><b>Sigh</b></td>
+  <td rowspan="11" style="vertical-align: middle; text-align:center;" align="center">paralinguistic</td>
+    <td align="center"><b>[sigh]</b></td>
     <td align="center">Sighing sound</td>
+    <td align="center"><b>[inhale]</b></td>
+    <td align="center">Inhaling sound</td>
   </tr>
+
   <tr>
-    <td align="center"><b>Surprise-oh</b></td>
-    <td align="center">Expressing surprise: "Oh"</td>
-    <td align="center"><b>Surprise-ah</b></td>
-    <td align="center">Expressing surprise: "Ah"</td>
+    <td align="center"><b>[laugh]</b></td>
+    <td align="center">Laughter sound</td>
+    <td align="center"><b>[chuckle]</b></td>
+    <td align="center">Chuckling sound</td>
   </tr>
+
   <tr>
-    <td align="center"><b>Surprise-wa</b></td>
-    <td align="center">Expressing surprise: "Wa"</td>
-    <td align="center"><b>Confirmation-en</b></td>
+    <td align="center"><b>[exhale]</b></td>
+    <td align="center">Exhaling sound</td>
+    <td align="center"><b>[clears throat]</b></td>
+    <td align="center">Throat clearing sound</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[snort]</b></td>
+    <td align="center">Snorting sound</td>
+    <td align="center"><b>[giggle]</b></td>
+    <td align="center">Giggling sound</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[cough]</b></td>
+    <td align="center">Coughing sound</td>
+    <td align="center"><b>[breath]</b></td>
+    <td align="center">Breathing sound</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[uhm]</b></td>
+    <td align="center">Hesitation sound: "Uhm"</td>
+    <td align="center"><b>[Confirmation-en]</b></td>
     <td align="center">Confirming: "En"</td>
   </tr>
+
   <tr>
-    <td align="center"><b>Question-ei</b></td>
-    <td align="center">Questioning: "Ei"</td>
-    <td align="center"><b>Dissatisfaction-hnn</b></td>
+    <td align="center"><b>[Surprise-oh]</b></td>
+    <td align="center">Expressing surprise: "Oh"</td>
+    <td align="center"><b>[Surprise-ah]</b></td>
+    <td align="center">Expressing surprise: "Ah"</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[Surprise-wa]</b></td>
+    <td align="center">Expressing surprise: "Wa"</td>
+    <td align="center"><b>[Surprise-yo]</b></td>
+    <td align="center">Expressing surprise: "Yo"</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[Dissatisfaction-hnn]</b></td>
     <td align="center">Dissatisfied sound: "Hnn"</td>
+    <td align="center"><b>[Question-ei]</b></td>
+    <td align="center">Questioning: "Ei"</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[Question-ah]</b></td>
+    <td align="center">Questioning: "Ah"</td>
+    <td align="center"><b>[Question-en]</b></td>
+    <td align="center">Questioning: "En"</td>
+  </tr>
+
+  <tr>
+    <td align="center"><b>[Question-yi]</b></td>
+    <td align="center">Questioning: "Yi"</td>
+    <td align="center"><b>[Question-oh]</b></td>
+    <td align="center">Questioning: "Oh"</td>
   </tr>
 </table>
  
@@ -349,6 +399,7 @@ For more examples, see [demo page](https://stepaudiollm.github.io/step-audio-edi
 | Models   | 🤗 Hugging Face | ModelScope |
 |-------|-------|-------|
 | Step-Audio-EditX | [stepfun-ai/Step-Audio-EditX](https://huggingface.co/stepfun-ai/Step-Audio-EditX) | [stepfun-ai/Step-Audio-EditX](https://modelscope.cn/models/stepfun-ai/Step-Audio-EditX) |
+| Step-Audio-EditX | [stepfun-ai/Step-Audio-EditX-AWQ-4bit](https://huggingface.co/stepfun-ai/Step-Audio-EditX-AWQ-4bit) | [stepfun-ai/Step-Audio-EditX-AWQ-4bit](https://modelscope.cn/models/stepfun-ai/Step-Audio-EditX-AWQ-4bit) |
 | Step-Audio-Tokenizer | [stepfun-ai/Step-Audio-Tokenizer](https://huggingface.co/stepfun-ai/Step-Audio-Tokenizer) | [stepfun-ai/Step-Audio-Tokenizer](https://modelscope.cn/models/stepfun-ai/Step-Audio-Tokenizer) |
 
 
@@ -366,21 +417,21 @@ The following table shows the requirements for running Step-Audio-EditX model (b
 * Tested operating system: Linux
 
 ### 🔧 Dependencies and Installation
-- Python >= 3.10.0 (Recommend to use [Anaconda](https://www.anaconda.com/download/#linux) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html))
-- [PyTorch >= 2.4.1-cu121](https://pytorch.org/)
+- Python >= 3.12
+- [PyTorch >= 2.9.1](https://pytorch.org/)
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads)
 
 ```bash
 git clone https://github.com/stepfun-ai/Step-Audio-EditX.git
-conda create -n stepaudioedit python=3.10
-conda activate stepaudioedit
 
 cd Step-Audio-EditX
-pip install -r requirements.txt
+uv sync --refresh
+source .venv/bin/activate
 
 git lfs install
 git clone https://huggingface.co/stepfun-ai/Step-Audio-Tokenizer
 git clone https://huggingface.co/stepfun-ai/Step-Audio-EditX
+git clone https://huggingface.co/stepfun-ai/Step-Audio-EditX-AWQ-4bit/
 
 ```
 
@@ -415,16 +466,18 @@ docker run --rm --gpus all \
 # The path of the generated audio file is output/fear_zh_female_prompt_cloned.wav
 python3 tts_infer.py \
     --model-path where_you_download_dir \
-    --prompt-text "我总觉得，有人在跟着我，我能听到奇怪的脚步声。"\
-    --prompt-audio "examples/fear_zh_female_prompt.wav"\
+    --tokenizer-path where_you_download_dir \
+    --prompt-text "我总觉得，有人在跟着我，我能听到奇怪的脚步声。" \
+    --prompt-audio "examples/fear_zh_female_prompt.wav" \
     --generated-text "可惜没有如果，已经发生的事情终究是发生了。" \
     --edit-type "clone" \
     --output-dir ./output 
 
 python3 tts_infer.py \
     --model-path where_you_download_dir \
-    --prompt-text "His political stance was conservative, and he was particularly close to margaret thatcher."\
-    --prompt-audio "examples/zero_shot_en_prompt.wav"\
+    --tokenizer-path where_you_download_dir \
+    --prompt-text "His political stance was conservative, and he was particularly close to margaret thatcher." \
+    --prompt-audio "examples/zero_shot_en_prompt.wav" \
     --generated-text "Underneath the courtyard is a large underground exhibition room which connects the two buildings.	" \
     --edit-type "clone" \
     --output-dir ./output 
@@ -434,38 +487,39 @@ python3 tts_infer.py \
 # emotion; fear
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-text "我总觉得，有人在跟着我，我能听到奇怪的脚步声。" \
-    --prompt-audio "examples/fear_zh_female_prompt.wav"\
+    --prompt-audio "examples/fear_zh_female_prompt.wav" \
     --edit-type "emotion" \
     --edit-info "fear" \
-    --n-edit-iter 2 \
     --output-dir ./output 
 
 # emotion; happy
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-text "You know, I just finished that big project and feel so relieved. Everything seems easier and more colorful, what a wonderful feeling!" \
-    --prompt-audio "examples/en_happy_prompt.wav"\
+    --prompt-audio "examples/en_happy_prompt.wav" \
     --edit-type "emotion" \
     --edit-info "happy" \
-    --n-edit-iter 2 \
     --output-dir ./output 
 
 # style; whisper
 # for style whisper, the edit iteration num should be set bigger than 1 to get better results.
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-text "比如在工作间隙，做一些简单的伸展运动，放松一下身体，这样，会让你更有精力." \
     --prompt-audio "examples/whisper_prompt.wav" \
     --edit-type "style" \
     --edit-info "whisper" \
-    --n-edit-iter 2 \
     --output-dir ./output 
 
 # paraliguistic 
 # supported tags, Breathing, Laughter, Surprise-oh, Confirmation-en, Uhm, Surprise-ah, Surprise-wa, Sigh, Question-ei, Dissatisfaction-hnn
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-text "我觉得这个计划大概是可行的，不过还需要再仔细考虑一下。" \
     --prompt-audio "examples/paralingustic_prompt.wav" \
     --generated-text "我觉得这个计划大概是可行的，[Uhm]不过还需要再仔细考虑一下。" \
@@ -476,6 +530,7 @@ python3 tts_infer.py \
 # Prompt text is not needed.
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-audio "examples/denoise_prompt.wav"\
     --edit-type "denoise" \
     --output-dir ./output 
@@ -484,6 +539,7 @@ python3 tts_infer.py \
 # Prompt text is not needed.
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-audio "examples/vad_prompt.wav" \
     --edit-type "vad" \
     --output-dir ./output 
@@ -492,10 +548,11 @@ python3 tts_infer.py \
 # supported edit-info: faster, slower, more faster, more slower
 python3 tts_infer.py \
     --model-path where_you_download_dir \
+    --tokenizer-path where_you_download_dir \
     --prompt-text "上次你说鞋子有点磨脚，我给你买了一双软软的鞋垫。" \
     --prompt-audio "examples/speed_prompt.wav" \
     --edit-type "speed" \
-    --edit-info "faster" \
+    --edit-info "more faster" \
     --output-dir ./output 
 
 ```
@@ -507,24 +564,48 @@ Start a local server for online inference.
 Assume you have one GPU with at least 12GB memory available and have already downloaded all the models.
 
 ```bash
-# Step-Audio-EditX demo
-python app.py --model-path where_you_download_dir --model-source local
+# Standard launch
+python app.py --model-path where_you_download_dir --tokenizer-path where_you_download_dir --model-source local
 
-# Memory-efficient options with runtime quantization
-# For systems with limited GPU memory, you can use quantization to reduce memory usage:
+# Using pre-quantized AWQ 4-bit models, memory-efficient mode (for limited GPU memory, ~6-8GB usage)
+python app.py \
+    --model-path path/to/quantized/model \
+    --tokenizer-path where_you_download_dir \
+    --model-source local \
+    --gpu-memory-utilization 0.1 \
+    --enforce-eager \
+    --max-num-seqs 1 \
+    --cosyvoice-dtype bfloat16 \
+    --no-cosyvoice-cuda-graph
 
-# INT8 quantization
-python app.py --model-path where_you_download_dir --model-source local --quantization int8
-
-# INT4 quantization
-python app.py --model-path where_you_download_dir --model-source local --quantization int4
-
-# Using pre-quantized AWQ models
-python app.py --model-path path/to/quantized/model --model-source local --quantization awq-4bit
-
-# Example with custom settings:
-python app.py --model-path where_you_download_dir --model-source local --torch-dtype float16 --enable-auto-transcribe
 ```
+
+##### Available Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--model-path` | (required) | Path to the model directory |
+| `--model-source` | `auto` | Model source: `auto`, `local`, `modelscope`, `huggingface` |
+| `--gpu-memory-utilization` | `0.5` | GPU memory ratio for vLLM KV cache (0.0-1.0) |
+| `--max-model-len` | `3072` | Maximum sequence length, affects KV cache size |
+| `--enforce-eager` | `True` | Disable vLLM CUDA Graphs (saves ~0.5GB memory) |
+| `--max-num-seqs` | `1` | Maximum concurrent sequences (vLLM default: 256, lower = less memory) |
+| `--dtype` | `bfloat16` | Model dtype: `float16`, `bfloat16` |
+| `--quantization` | `None` | Quantization method: `awq`, `gptq`, `fp8` |
+| `--cosyvoice-dtype` | `bfloat16` | CosyVoice vocoder dtype: `float32`, `bfloat16`, `float16` |
+| `--no-cosyvoice-cuda-graph` | `False` | Disable CosyVoice CUDA Graphs (saves memory) |
+| `--enable-auto-transcribe` | `False` | Enable automatic audio transcription |
+
+##### Memory Usage Guide
+
+| Configuration | Estimated GPU Memory | Use Case |
+|--------------|---------------------|----------|
+| Standard (defaults) | ~12-15 GB | Best quality and speed |
+| Memory-efficient | ~6-8 GB | Limited GPU memory, some quality trade-off |
+| AWQ 4-bit quantized | ~8-10 GB | Good balance of quality and memory |
+
+## Training
+Please refer to script/ReadMe.md
 
 ### 🔄 Model Quantization (Optional)
 
@@ -779,6 +860,7 @@ Part of the code and data for this project comes from:
 * [transformers](https://github.com/huggingface/transformers)
 * [FunASR](https://github.com/modelscope/FunASR)
 * [NVSpeech](https://huggingface.co/datasets/amphion/Emilia-NV)
+* [vllm](https://github.com/vllm-project/vllm)
 
 Thank you to all the open-source projects for their contributions to this project!
 
