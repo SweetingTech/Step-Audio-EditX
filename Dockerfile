@@ -36,6 +36,6 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # 使用 uv 安装依赖
-RUN uv sync --frozen --no-dev
+RUN uv sync
 
 CMD ["uv", "run", "python", "app.py", "--model-path", "/model", "--model-source", "local"]
