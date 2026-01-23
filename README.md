@@ -420,6 +420,8 @@ The following table shows the requirements for running Step-Audio-EditX model (b
 - Python >= 3.12
 - [PyTorch >= 2.9.1](https://pytorch.org/)
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads)
+  
+We recommend using uv to quickly set up a Python environment.
 
 ```bash
 git clone https://github.com/stepfun-ai/Step-Audio-EditX.git
@@ -444,7 +446,7 @@ where_you_download_dir
 
 #### Run with Docker
 
-You can set up the environment required for running Step-Audio-EditX using the provided Dockerfile.
+You can also set up the environment required for running Step-Audio-EditX using the provided Dockerfile.
 
 ```bash
 # build docker
