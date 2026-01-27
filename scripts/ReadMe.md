@@ -1,34 +1,34 @@
-# Step-audio-editx GRPO训练框架
+# Step-audio-editx GRPO Training Framework
 
-本项目是基于TRL面向editx实现的GRPO训练框架。
+This project is a GRPO training framework implemented for editx, based on the TRL library.
 
-## 快速开始
+## Quick Start
 
-### 1. 环境准备
+### 1. Environment Preparation
 
-确保已安装以下依赖：
+Ensure the following dependencies are installed:
 ```bash
 cd Step-Audio-EditX
 uv sync --refresh
 source .venv/bin/activate
 ```
-### 2. 数据准备
+### 2. Data Preparation
 
-数据格式为JSONL，每行包含以下字段。音频token提取可参考 `scripts/extract_audio_token_test.py`
+Data should be in JSONL format, with each line containing the following fields. For audio token extraction, please refer to `scripts/extract_audio_token_test.py`
 ```json
 {
-    "source_audio": "需要Edit的音频路径",
-    "source_text": "source_audio对应的文本",
-    "source_vq02vq06": "source_audio音频token序列",
-    "target_text": "source_audio对应的文本",
+    "source_audio": "Path to the audio to be edited",
+    "source_text": "Text corresponding to source_audio",
+    "source_vq02vq06": "Audio token sequence of source_audio",
+    "target_text": "Target text for the edited audio",
     "task_type": "edit",
     "edit_type": "emotion",
-    "edit_info": "具体情绪类别",
+    "edit_info": "Specific emotion category",
 }
 ```
 
-### 3. 模型配置修改
-在开始训练前，请检查您的模型文件夹。该目录应包含完整的模型权重及配置文件，文件结构如下：
+### 3. Model Configuration
+Before starting the training, check your model folder. The directory should contain full model weights and configuration files with the following structure:
 ```
 Step-Audio-EditX/
 ├── CosyVoice-300M-25Hz
@@ -43,9 +43,9 @@ Step-Audio-EditX/
 └── tokenizer.model
 ```
 
-此外，必须手动修改配置文件：
+Additionally, you must manually modify the configuration file:
 
-- modeling_step1.py: 在340行中加入的`self.gradient_checkpointing = False`
+- modeling_step1.py: Add `self.gradient_checkpointing = False` around line 340.
 ```python
     ...
     def __init__(self, config):
@@ -58,130 +58,126 @@ Step-Audio-EditX/
 ```
 
 
-### 4 部署 Flow-matching 推理服务
+### 4 Deploy Flow-matching Inference Service
 
-本项目将Flow-matching部分与训练逻辑解耦。在启动训练脚本前，必须先部署 Flow-matching 推理服务。
+This project decouples the Flow-matching component from the training logic. You must deploy the Flow-matching inference service before launching the training script.
 
-**第一步：配置模型路径**
+**Step 1: Configure Model Path**
 
-在启动服务前，请修改 `src/utils/flow_server.py` 文件第 15 行的 `FLOW_PATH` 变量，将其修改为您的 **CosyVoice-300M-25Hz** 本地模型路径。
+In `src/utils/flow_server.py` (line 15), update the `FLOW_PATH` variable to point to your local **CosyVoice-300M-25Hz** model path.
 
 ```python
 # src/utils/flow_server.py
-# 修改后 (示例)
 FLOW_PATH = "/path/to/your/pretrained_models/CosyVoice-300M-25Hz"
 ```
 
-**第二步：启动服务脚本**
+**Step 2: Start the Service**
 
-配置完成后，执行以下命令启动推理服务（Flow-matching Server）：
+Run the following commands to start the Flow-matching Server:
 
 ```bash
 cd ./src/utils/
 bash run_server.sh
 ```
 
-### 5 定义reward function
+### 5. Define Reward Functions
 
-#### 5.1 自定义reward
+#### 5.1 Custom Reward Function
 
-您可以基于 `reward_func_genrm.py` 快速接入任意具有音频理解能力的多模态LLM 作为 reward model. 
+You can quickly integrate any multimodal LLM with audio understanding capabilities as a reward model based on `reward_func_genrm.py`.
 
-**步骤 1：实现 API 调用接口**
-打开 `src/utils/reward_func_genrm.py`，找到 `CustomGenerativeRM` 类。您只需要实现 `call_model` 方法，完成对您的目标模型 API 的调用即可。
 
-**步骤 2：注册并启用新 Reward**
-完成后需要在训练脚本`src/train_edit.py`中注册您的函数。
+**Step 1: Implement the API Interface**
+Open `src/utils/reward_func_genrm.py` and locate the `CustomGenerativeRM` class. You only need to implement the `call_model` method to handle the API request to your target model.
+
+**Step 2: Register and Enable the Reward**
+Register your function in the training script `src/train_edit.py`.
 ```python
 # src/train_edit.py
-
-# ... 引入您的函数
 from utils.reward_func_genrm import genrm_reward_func
 
 def main():
     # ...
-    # 在此处注册
     reward_registry = {
-        ....
-        # 新增注册项：键名即为启动脚本中调用的名字
+        # New entry: The key is the name used in the launch script
         "my_genrm": genrm_reward_func, 
     }
-    # ...
 ```
 
-在训练脚本中，将新注册的名字加入 `REWARD_FUNCS`：
+In your launch script, add the registered name to `REWARD_FUNCS`:
+
 ```bash
 # ./scripts/run_edit_grpo.sh
-
 REWARD_FUNCS="my_genrm"
 ```
 
-#### 5.2 使用gemini作为reward model
-`src/utils/reward_func_gemini.py`中实现了基于gemini的reward function。如需使用，请按照以下步骤操作：
+#### 5.2 Using Gemini as a Reward Model
+A Gemini-based reward function is implemented in `src/utils/reward_func_gemini.py`. To use it:
 
-**步骤 1：配置环境变量**
-在终端中设置您的 Google API Key：
+**Step 1: Configure Environment Variable**
+Set your Google API Key in the terminal:
 ```bash
-export API_KEY="您的_GEMINI_API_KEY"
+export API_KEY="YOUR_GEMINI_API_KEY"
 ```
 
-**步骤 2：在训练脚本中启用**
-在训练脚本中，将`REWARD_FUNCS`参数设定为"gemini"：
+**Step 2: Enable in Training Script**
+Set the `REWARD_FUNCS` parameter to "gemini":
 ```bash
 # ./scripts/run_edit_grpo.sh
-
 REWARD_FUNCS="gemini"
 ```
 
 
-### 6 训练脚本启动
+### 6. Launching Training
 
-在确认 Flow-matching 服务已成功启动（端口正常监听且无报错）并完成奖励函数定义后，即可开始训练。
+Once the Flow-matching service is running (port listening without errors) and reward functions are defined, you can start training.
 
-#### 6.1 训练脚本
-项目提供了两个训练脚本，`run_edit_grpo.sh`使用标准的Huggingface 推理模式，`run_edit_grpo_vllm.sh`则使用 vLLM 进行推理采样，速度更快，显存利用率更高，请根据显存资源和速度需求进行选择。
+#### 6.1 Training Scripts
+The project provides two scripts:
 
-#### 6.2 修改配置
-在执行脚本前，请根据实际环境修改 `./scripts/` 目录下的脚本参数：
+- `run_edit_grpo.sh`: Uses standard Hugging Face inference mode.
+
+- `run_edit_grpo_vllm.sh`: Uses vLLM for inference sampling, providing faster speeds and better VRAM efficiency.
+
+
+#### 6.2 Modifying Configuration
+Update the parameters in the `./scripts/` directory before execution:
 ```bash
 #!/bin/bash
 
-# 模型与数据路径配置
-MODEL_PATH="{EDITX_PATH}"                # Step-audio-editx 训练模型路径
+# Model and Data Paths
+MODEL_PATH="{EDITX_PATH}"                # Path to Step-audio-editx model
 DATA_FILES=(
-    "{TRAINING_INDEX_FILE}"               # 训练数据索引文件路径 (JSONL)
-    # 可以添加多个文件...
+    "{TRAINING_INDEX_FILE}"               # Path to training data index (JSONL)
 )
 
-# 输出与日志配置
-OUTPUT_DIR="{YOUR_PATH_TO_SAVE_CHECKPOINT}"                  # Checkpoint 保存路径
-LOG_ROOT="{YOUR_PATH_TO_LOG_TRAINING_PROCESS}"                     # 训练日志存放路径
+# Output and Logging
+OUTPUT_DIR="{YOUR_PATH_TO_SAVE_CHECKPOINT}"
+LOG_ROOT="{YOUR_PATH_TO_LOG_TRAINING_PROCESS}"
 CONFIG_PATH="./config/train_config/accelerate_configs/deepspeed_zero2.yaml"
 
-# 奖励函数与服务端配置
-REWARD_FUNCS="my_genrm"                   # 启用的 Reward Function 名称
-SERVER_IP="127.0.0.1"                     # Flow-matching 推理服务的 IP 地址
+# Reward and Server Config
+REWARD_FUNCS="my_genrm"                   # Enabled Reward Functions
+SERVER_IP="127.0.0.1"                     # IP of the Flow-matching service
 ...
 
 ```
 
 
-### 7. 关键训练参数说明
+### 7. Key Training Parameters
 
-| 参数名 | 默认值/示例 | 说明 |
+| Parameter | Default/Example | Description |
 | :---- | :--- | :--- |
-| `--num_generations` | `8` | **组采样数 (Group Size)**。GRPO 算法核心参数，指对同一个 Prompt 并行生成的样本数量。|
-| `--per_device_train_batch_size` | `2` | 单卡 Batch Size。指输入的 Prompt 数量。|
-| `--gradient_accumulation_steps` | `2` | 梯度累积步数。用于在有限显存下模拟更大的 Batch Size 更新，以稳定训练梯度。 |
-| `--max_audio_tokens` | `1024` | 音频 Token 最大长度。控制生成的音频时长上限，过长会显著增加显存消耗和训练时间。 |
-| `--reward_server_ip` | `{SERVER_IP}` | **Flow Server 地址**。即步骤 4.1 中启动的 Flow-matching 服务 IP（本机通常为 `127.0.0.1`）。 |
-| `--reward_server_num` | `2` | 服务端并发实例数。指定训练脚本同时连接的 Flow-matching Server 数量。**需与 `run_server.sh` 中启动的 `NUM_SERVERS` 保持一致**。
-| `--reward_funcs` | `...` | 启用的奖励函数列表|
-| `MODEL_PATH` | `{PATH}` | 训练的底座模型路径（Step-audio-editx）。 |
-| `DATA_FILE` | `{FILE}` | 训练数据的 JSONL 索引文件路径。 |
-| `--use_vllm` | `false` | **启用 vLLM 加速**。开启后将使用 vLLM 引擎进行推理采样，能大幅提升采样速度并优化显存分配。 |
-| `--vllm_mode` | `"colocate"` | **部署模式**。通常设为 `colocate`。 |
-| `--vllm_gpu_memory_utilization` | `0.3` | **推理显存占用比**。指定 vLLM 占用的显存百分比（0.0-1.0）。 |
+| `--num_generations` | `8` | **Group Size**. The number of samples generated per prompt (Core GRPO parameter). |
+| `--per_device_train_batch_size` | `2` | Number of input prompts per GPU. |
+| `--gradient_accumulation_steps` | `2` | Steps for gradient accumulation to simulate larger batches. |
+| `--max_audio_tokens` | `1024` | Maximum length for generated audio tokens. |
+| `--reward_server_ip` | `{SERVER_IP}` | IP of the Flow-matching service (usually `127.0.0.1`). |
+| `--reward_server_num` | `2` | Number of concurrent Flow-matching server instances (must match `NUM_SERVERS` in `run_server.sh`). |
+| `--reward_funcs` | `...` | List of enabled reward functions. |
+| `--use_vllm` | `false` | Enable vLLM acceleration for faster inference sampling. |
+| `--vllm_mode` | `"colocate"` | Deployment mode for vLLM. |
+| `--vllm_gpu_memory_utilization` | `0.3` | Percentage of VRAM (0.0-1.0) allocated for vLLM. |
 
 
 

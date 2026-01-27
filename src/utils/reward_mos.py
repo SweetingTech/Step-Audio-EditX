@@ -28,7 +28,7 @@ print(f"Worker ID: {worker_id}, Using Device: {device}")
 # ============================
 # 2. 加载 Deepfake 模型
 # ============================
-MODEL_PATH = "/data/deepfake/models/universa-ext-5metrics/model.pt"
+MODEL_PATH = ""
 
 print(f"Loading Deepfake model from {MODEL_PATH}...")
 try:

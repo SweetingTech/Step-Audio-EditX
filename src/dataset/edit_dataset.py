@@ -10,7 +10,6 @@ from typing import List, Dict, Any, Optional, Union
 from transformers import PreTrainedTokenizerBase, AutoTokenizer
 from trl import apply_chat_template
 
-# 系统提示词 (保持不变)
 AUDIO_EDIT_CLONE_SYSTEM_PROMPT_TPL = """Generate audio with the following timbre, prosody and speaking style
 
 [speaker_start]
@@ -31,8 +30,8 @@ Note: You will receive instructions in natural language and are expected to accu
 
 class EditDataset(Dataset):
     """
-    用于 Edit 训练的数据集类，采用对话格式。
-    支持读取多个 JSONL 文件并合并数据。
+    Dataset class for Audio Edit training, using a conversation format.
+    Supports reading and merging data from multiple JSONL files.
     """
     
     def __init__(
@@ -43,13 +42,14 @@ class EditDataset(Dataset):
         processing_class: Optional[PreTrainedTokenizerBase] = None,
     ):
         """
-        初始化数据集
+        Initialize the dataset.
         Args:
-            json_files: 单个 JSONL 文件路径或文件路径列表
-            max_text_length: 文本截断/过滤长度
-            max_audio_tokens: 音频序列截断/过滤长度
+            json_files: Path to a single JSONL file or a list of file paths.
+            max_text_length: Length for text truncation/filtering.
+            max_audio_tokens: Length for audio sequence truncation/filtering.
+            processing_class: Tokenizer or processor instance.
         """
-        # 统一处理为列表
+        # Unify input as a list
         if isinstance(json_files, str):
             self.json_files = [json_files]
         else:
@@ -58,22 +58,22 @@ class EditDataset(Dataset):
         self.max_text_length = max_text_length
         self.max_audio_tokens = max_audio_tokens
         
-        # 初始化 Tokenizer
+        # Initialize Tokenizer
         if processing_class is None:
-            # 注意：这里的路径可能需要根据实际情况调整，或者设为必填
+            # Note: This path may need adjustment based on the actual environment
             processing_class = AutoTokenizer.from_pretrained("/data/Model_weights/Step-Audio-EditX-sft/", trust_remote_code=True)
         if processing_class.pad_token is None:
             processing_class.pad_token = processing_class.eos_token
         self.processing_class = processing_class
 
-        # 加载所有文件的数据
+        # Load data from all specified files
         self.data = self.load_data()
         logging.info(f"Total samples loaded from {len(self.json_files)} files: {len(self.data)}")
 
     
     def load_data(self) -> List[Dict[str, Any]]:
         """
-        从 self.json_files 列表加载并过滤训练数据。
+        Loads and filters training data from the self.json_files list.
         """
         all_data = []
         
@@ -90,7 +90,6 @@ class EditDataset(Dataset):
                     try:
                         item = json.loads(line.strip())
                         
-                        # 检查必要字段
                         # required_keys = ['source_audio', 'source_text', 'source_vq02vq06', 'target_audio', 'target_text', 'target_vq02vq06', 'edit_type', 'edit_info']
                         required_keys = ['source_audio', 'source_text', 'source_vq02vq06', 'target_text']
                         if not all(key in item for key in required_keys):
@@ -147,10 +146,8 @@ class EditDataset(Dataset):
         edit_info: Optional[str] = None,
         text: Optional[str] = None
         ) -> str:
-        """构建编辑指令"""
         audio_text = audio_text.strip() if audio_text else ""
         
-        # 避免 edit_info 为 None 时导致拼接错误
         safe_edit_info = str(edit_info) if edit_info is not None else ""
 
         if edit_type in {"emotion", "speed"}:
@@ -212,15 +209,7 @@ class EditDataset(Dataset):
                 {"role": "user", "content": item['source_text']}
             ]
             pass
-        # tmp = apply_chat_template({"prompt":messages}, self.processing_class)
-        # 'source_text': item['source_text'],
-        # 'source_audio': item['source_audio'],
-        # 'source_vq02vq06': item['source_vq02vq06'],
-        # 'target_text': item['target_text'],
-        # 'task_type': item['task_type'],
-        # 'edit_type': None,
-        # 'edit_info': None,
-        # 'emotion': item['emotion'],
+
         return {
             'prompt': messages, 
             'source_text': item['source_text'], 
@@ -238,16 +227,15 @@ class EditDataset(Dataset):
 
 
 def create_edit_dataset(
-    json_file: Union[str, List[str]], # 修改参数名和类型提示
+    json_file: Union[str, List[str]], 
     max_text_length: int = 512,
     max_audio_tokens: int = 2048,
     processing_class: Optional[PreTrainedTokenizerBase] = None,
 ) -> EditDataset:
     """
-    创建 Edit 数据集的工厂函数。
-    参数 json_file 可以是单个字符串路径，也可以是字符串路径列表。
+    Function to create an EditDataset instance.
+    The json_file parameter can be a single string path or a list of string paths.
     """
-    # 为了兼容之前的参数名 json_file，但在内部传递给 json_files
     return EditDataset(
         json_files=json_file, 
         max_text_length=max_text_length,

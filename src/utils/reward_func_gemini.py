@@ -9,35 +9,35 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 api_key = os.getenv("API_KEY")
 
-# 配置日志
+# --- Logging Configuration ---
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- 端口配置 ---
-# 仅保留 Flow 用于生成音频，移除其他 Reward Server 端口
+# --- Port Configuration ---
+# Keep only Flow for audio generation; other Reward Server ports have been removed
 PORT_BASE_FLOW = 8080
 
-# --- 常量与 Prompt ---
+# --- Constants & Prompts ---
 EMOTIONS = ["admiration", "angry", "confusion", "embarrass", "excited", "fear", "happy", "humour", "sad", "surprised"]
 
-EVAL_PROMPT = """你是一个专业的音频情感验证专家。
+EVAL_PROMPT = """You are a professional audio emotion verification expert.
 
-### 任务
-请听取音频内容，判断说话人的声音情感特征是否符合给定的【目标情感】。
+### Task
+Please listen to the audio content and determine if the speaker's vocal emotional characteristics match the given [Target Emotion].
 
-### 输入信息
-**目标情感**：{target_emotion}
+### Input Information
+**Target Emotion**: {target_emotion}
 
-### 判别标准
-1. **忽略语义**：请忽略说话的具体内容，仅关注说话人的语气、音调、语速、音量和能量变化。
-2. **特征匹配**：分析音频声学特征是否与【目标情感】的典型表现一致。
+### Criteria
+1. **Ignore Semantics**: Please ignore the specific verbal content. Focus only on the speaker's tone, pitch, tempo, volume, and energy dynamics.
+2. **Feature Matching**: Analyze whether the acoustic features of the audio are consistent with the typical expression of the [Target Emotion].
 
-### 输出要求
-1. 请保持思考过程**简短精炼**，快速判断声音特征与目标情感的匹配度。
-2. 必须直接以标准 JSON 格式输出，不要包含 Markdown 标记或其他解释。
-3. 如果音频符合目标情感，输出 `true`；如果不符合，输出 `false`。
+### Output Requirements
+1. Keep your thought process **concise and refined**, quickly judging the match between vocal features and target emotion.
+2. Output must be directly in standard JSON format; do not include Markdown tags or other explanations.
+3. If the audio matches the target emotion, output `true`; if not, output `false`.
 
-### 输出示例
+### Output Example
 {{"is_match": true}}
 """
 
@@ -49,21 +49,20 @@ class GeminiAudioService:
 
     def call_gemini_api(self, prompt: str, audio_base64: str, max_retries: int = 5, retry_delay: int = 3) -> Optional[bool]:
         """
-        使用第一份代码中的通用 REST 结构调用 Gemini API
+        Calls the Gemini API using a standard REST structure.
         """
         if not audio_base64:
             return None
 
         headers = {"Content-Type": "application/json"}
         
-        # 严格按照 Gemini 标准 Payload 结构
         payload = {
             "contents": [{
                 "parts": [
                     {"text": prompt},
                     {
                         "inline_data": {
-                            "mime_type": "audio/wav", # 或者是 audio/mpeg
+                            "mime_type": "audio/wav", # audio/mpeg
                             "data": audio_base64
                         }
                     }
@@ -76,12 +75,10 @@ class GeminiAudioService:
 
         for attempt in range(max_retries):
             try:
-                # 注意：URL 已经带了 API Key，Header 不需要 Authorization
                 response = requests.post(self.api_url, json=payload, headers=headers, timeout=120)
                 
                 if response.status_code == 200:
                     res_json = json.loads(response.text)
-                    # 按照第一份代码的路径提取 text
                     try:
                         content = res_json['candidates'][0]['content']['parts'][0]['text']
                         return self._extract_match_result(content)
@@ -100,8 +97,7 @@ class GeminiAudioService:
         return None
 
     def _extract_match_result(self, text_response: str) -> Optional[bool]:
-        """解析 Gemini 输出的 JSON 内容"""
-        # 清洗常见的 Markdown 标签
+        """Parses the JSON content output by Gemini"""
         clean_text = text_response.replace("```json", "").replace("```", "").strip()
         try:
             data = json.loads(clean_text)
@@ -110,18 +106,17 @@ class GeminiAudioService:
             if str(res).lower() == "true": return True
             if str(res).lower() == "false": return False
         except:
-            # 正则兜底
             if re.search(r'"is_match"\s*:\s*true', clean_text.lower()): return True
             if re.search(r'"is_match"\s*:\s*false', clean_text.lower()): return False
         return None
 
 
 # ==========================================
-# 工具函数
+# Utility Functions
 # ==========================================
 
 def get_balanced_url(base_ip: str, base_port: int, num_servers: int, endpoint: str) -> str:
-    """随机负载均衡获取服务器地址"""
+    """Obtains server address via random load balancing"""
     port_offset = random.randint(0, num_servers - 1)
     port = base_port + port_offset
     return f"http://{base_ip}:{port}{endpoint}"
@@ -135,7 +130,7 @@ def _get_audio_from_flow(
     num_servers: int,
     proxies: Dict
 ) -> Optional[str]:
-    """请求 Flow Server 生成音频"""
+    """Requests audio generation from the Flow Server"""
     if output_ids and output_ids[-1] == 3:
         output_ids = output_ids[:-1]
     
@@ -158,7 +153,7 @@ def _get_audio_from_flow(
         return None
 
 # ==========================================
-# 核心处理逻辑 (单样本)
+# Core Processing Logic (Single Sample)
 # ==========================================
 
 def _process_sample_for_gemini_reward(
@@ -170,13 +165,13 @@ def _process_sample_for_gemini_reward(
     gemini_service,
 ) -> float:
     """
-    1. 调用 Flow 生成音频
-    2. 调用 Gemini 判断情感
-    3. 返回 1.0 或 0.0
+    1. Call Flow to generate audio.
+    2. Call Gemini to judge emotion.
+    3. Return 1.0 or 0.0.
     """
     proxies = {"http": None, "https": None}
     
-    # --- 1. 生成音频 ---
+    # --- 1. Generate Audio ---
     audio_b64 = _get_audio_from_flow(
         uttid=f"sample_{index}",
         output_ids=output_ids,
@@ -188,51 +183,43 @@ def _process_sample_for_gemini_reward(
     )
     
     if not audio_b64:
-        return 0.0 # 音频生成失败
+        return 0.0 
 
-    # --- 2. 准备 Gemini Prompt ---
+    # --- 2. Prepare Gemini Prompt ---
     target_emotion = kwargs.get('target_emotion_text', 'unknown')
     if not target_emotion:
         return 0.0
         
     prompt = EVAL_PROMPT.format(target_emotion=target_emotion)
 
-    # --- 3. 调用 Gemini ---
+    # --- 3. Call Gemini API ---
     is_match = gemini_service.call_gemini_api(prompt, audio_b64)
 
-    # --- 4. 计算分数 ---
+    # --- 4. Calculate Score ---
     if is_match is True:
         return 1.0
     elif is_match is False:
         return 0.0
     else:
-        # 如果 API 调用失败或解析失败，通常给 0 或者一个极小的惩罚值，这里给 0
         return 0.0
 
 # ==========================================
-# 主奖励函数入口
+# Main Reward Function Entry Point
 # ==========================================
 
 def _parse_kwargs_for_gemini(reward_kwargs: Dict, batch_size: int) -> List[Dict]:
-    """解析参数，提取每条数据的目标情感文本"""
+    """Parses arguments and extracts target emotion text for each entry"""
     
     source_audios = reward_kwargs.get('source_audio', [""] * batch_size)
     source_vqs = reward_kwargs.get('source_vq02vq06', [[]] * batch_size)
     
-    # 这里的 edit_info 通常是 "Make the voice sound happy" 或直接是 "happy"
-    # 我们尽量提取出核心情感词，或者直接将 edit_info 传给 Gemini 让它理解
     edit_infos = reward_kwargs.get('edit_info', [""] * batch_size)
-    labels = reward_kwargs.get('label', [""] * batch_size) # 有些数据集字段叫 label
+    labels = reward_kwargs.get('label', [""] * batch_size) 
     
     parsed_list = []
     for i in range(batch_size):
-        # 优先使用 label，如果没有则尝试从 edit_info 提取
         target_text = labels[i] if labels[i] else edit_infos[i]
-        
-        # 简单清洗：如果是 "Make the voice sound happy"，Gemini 也能懂
-        # 但为了 prompt 准确，最好是 "happy"
-        # 这里做一个简单的匹配优化，如果 target_text 包含标准情感词，提取出来
-        # 如果不包含，就直接把整个句子传给 Gemini，Gemini 理解能力很强
+
         final_emotion_target = str(target_text)
         
         info_lower = str(target_text).lower()
@@ -254,11 +241,11 @@ def gemini_reward_func(
     completion_ids: List[List[int]],
     server_ip: str = "127.0.0.1",
     num_servers: int = 2,
-    gemini_api_key: str = api_key, # 必须传入
+    gemini_api_key: str = api_key, 
     **reward_kwargs
 ) -> List[float]:
     """
-    使用 Gemini 作为 Judge 的奖励函数
+    Reward function using Gemini as a Judge for audio emotional alignment.
     """
     if not gemini_api_key:
         logger.error("Gemini API Key is missing!")
@@ -267,12 +254,9 @@ def gemini_reward_func(
     batch_size = len(completion_ids)
     parsed_kwargs = _parse_kwargs_for_gemini(reward_kwargs, batch_size)
     
-    # 初始化 Gemini Service (无状态，可复用)
     gemini_service = GeminiAudioService(api_key=gemini_api_key)
 
     results = [0.0] * batch_size
-    # 限制并发数，防止触发 API Rate Limit
-    # Gemini Pro Vision 并发通常有限制，建议设为 4-8，具体视 API 额度而定
     max_workers = min(batch_size, 8)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

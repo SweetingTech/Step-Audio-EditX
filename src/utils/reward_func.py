@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial, update_wrapper
 
-# --- 端口配置 (需与 run_server_split.sh 一致) ---
+# --- Port Configuration (Must match run_server_split.sh) ---
 PORT_BASE_EMO = 8100
 PORT_BASE_CER = 8200
 PORT_BASE_SIM = 8300
@@ -16,7 +16,6 @@ PORT_BASE_MOS = 8400
 PORT_BASE_FLOW = 8080
 
 def get_balanced_url(base_ip: str, base_port: int, num_servers: int, endpoint: str) -> str:
-    """随机负载均衡获取服务器地址"""
     port_offset = random.randint(0, num_servers - 1)
     port = base_port + port_offset
     return f"http://{base_ip}:{port}{endpoint}"
@@ -30,7 +29,7 @@ def _get_audio_from_flow(
     num_servers: int,
     proxies: Dict
 ) -> Optional[str]:
-    """请求 Flow Server 生成音频"""
+    """Request the Flow Server to generate audio"""
     if output_ids and output_ids[-1] == 3:
         output_ids = output_ids[:-1]
     
@@ -52,12 +51,9 @@ def _get_audio_from_flow(
         print(f"[Flow Error] {uttid}: {e}")
         return None
 
-# ==========================================
-# 新增: 独立获取各类 Reward 的函数
-# ==========================================
 
 def _get_cer_reward_from_server(audio_b64: str, ref_text: str, server_ip: str, num_servers: int, proxies: Dict) -> float:
-    """从服务器获取 CER 奖励"""
+    """Fetch Character Error Rate (CER) reward from server"""
     try:
         url = get_balanced_url(server_ip, PORT_BASE_CER, num_servers, "/reward/cer")
         resp = requests.post(url, json={"audio_base64": audio_b64, "ref_text": ref_text}, proxies=proxies, timeout=30)
@@ -68,7 +64,7 @@ def _get_cer_reward_from_server(audio_b64: str, ref_text: str, server_ip: str, n
         return 0.0
 
 def _get_sim_reward_from_server(audio_b64: str, target_audio: str, server_ip: str, num_servers: int, proxies: Dict) -> float:
-    """从服务器获取 SIM 奖励"""
+    """Fetch Speaker Similarity (SIM) reward from server"""
     try:
         url = get_balanced_url(server_ip, PORT_BASE_SIM, num_servers, "/reward/sim")
         resp = requests.post(url, json={"audio_base64": audio_b64, "target_audio": target_audio}, proxies=proxies, timeout=30)
@@ -79,7 +75,7 @@ def _get_sim_reward_from_server(audio_b64: str, target_audio: str, server_ip: st
         return 0.0
 
 def _get_mos_reward_from_server(audio_b64: str, server_ip: str, num_servers: int, proxies: Dict) -> float:
-    """从服务器获取 SIM 奖励"""
+    """Fetch Mean Opinion Score (MOS) reward from server"""
     try:
         url = get_balanced_url(server_ip, PORT_BASE_MOS, num_servers, "/reward/mos")
         resp = requests.post(url, json={"audio_base64": audio_b64}, proxies=proxies, timeout=30)
@@ -90,7 +86,7 @@ def _get_mos_reward_from_server(audio_b64: str, server_ip: str, num_servers: int
         return 0.0
 
 def _get_emo_reward_from_server(audio_b64: str, emotion_id: int, server_ip: str, num_servers: int, proxies: Dict) -> float:
-    """从服务器获取 EMO 奖励"""
+    """Fetch Emotion (EMO) reward from server"""
     try:
         url = get_balanced_url(server_ip, PORT_BASE_EMO, num_servers, "/reward/emo")
         resp = requests.post(url, json={"audio_base64": audio_b64, "emotion": emotion_id}, proxies=proxies, timeout=30)
@@ -101,22 +97,23 @@ def _get_emo_reward_from_server(audio_b64: str, emotion_id: int, server_ip: str,
         return 0.0
 
 # ==========================================
-# 重构后的核心奖励计算逻辑 (单样本)
+# Refactored Core Reward Calculation Logic (Single Sample)
 # ==========================================
 def _process_sample_for_reward(
     index: int,
     output_ids: List[int],
     kwargs: Dict,
-    reward_type: str, # <--- 关键的新增参数
+    reward_type: str, 
     server_ip: str,
     num_servers: int,
 ) -> float:
     """
-    处理单条数据，先生成音频，然后根据 reward_type 请求特定的 Reward Server。
+    Process a single data point: first generate audio, then request 
+    a specific Reward Server based on the reward_type.
     """
     proxies = {"http": None, "https": None}
     
-    # 1. 生成音频 (Flow) - 这是公共步骤
+    # 1. Generate Audio (Flow) - This is a shared common step
     audio_b64 = _get_audio_from_flow(
         uttid=f"sample_{index}",
         output_ids=output_ids,
@@ -128,9 +125,9 @@ def _process_sample_for_reward(
     )
     
     if not audio_b64:
-        return 0.0 # 音频生成失败，奖励为0
+        return 0.0 
 
-    # 2. 根据 reward_type 请求特定的奖励服务器
+    # 2. Request a specific reward server based on reward_type
     reward = 0.0
     if reward_type == 'cer':
         reward = _get_cer_reward_from_server(audio_b64, kwargs['audio_text'], server_ip, num_servers, proxies)
@@ -145,12 +142,8 @@ def _process_sample_for_reward(
 
     return reward
 
-# ==========================================
-# GRPO 调用的三个主奖励函数
-# ==========================================
 
 def _parse_common_kwargs(reward_kwargs: Dict, batch_size: int) -> List[Dict]:
-    """解析参数并转换 Emotion (此函数无需修改)"""
     EMO2ID = {"angry": 0, "fear": 1, "excited": 2, "sad": 3, "surprised": 4}
     
     audio_texts = reward_kwargs.get('audio_text', [""] * batch_size)
@@ -188,7 +181,6 @@ def generic_reward_function(
     num_servers: int = 2,
     **reward_kwargs
 ) -> List[float]:
-    """通用的奖励函数入口 (修改了内部逻辑)"""
     batch_size = len(completion_ids)
     parsed_kwargs = _parse_common_kwargs(reward_kwargs, batch_size)
     
@@ -199,24 +191,23 @@ def generic_reward_function(
         futures = []
         for i in range(batch_size):
             f = executor.submit(
-                _process_sample_for_reward, # <-- 调用新的、更高效的函数
+                _process_sample_for_reward,
                 index=i,
                 output_ids=completion_ids[i],
                 kwargs=parsed_kwargs[i],
-                reward_type=reward_type, # <-- 传递 reward_type
+                reward_type=reward_type,
                 server_ip=server_ip,
                 num_servers=num_servers
             )
             futures.append(f)
         
-        # 现在 f.result()直接返回一个 float，不再是字典
         for i, f in enumerate(futures):
             results[i] = f.result()
             
     return results
 
 # ==========================================
-# 导出给 Trainer 的具体函数 (这些函数无需修改)
+# Exported Specific Functions for the Trainer
 # ==========================================
 
 def cer_reward_func(prompts, completions, completion_ids, **kwargs):

@@ -1,30 +1,30 @@
 #!/bin/bash
 
-# --- 路径配置 ---
+# --- Path Configuration ---
 MODEL_PATH="{EDITX_PATH}"
-# --- [支持多个数据文件，请使用数组格式] ---
+# --- [Supports multiple data files; please use array format] ---
 DATA_FILES=(
     "{TRAINING_INDEX_FILE}"
     # "xxxxx"
-    # 可以继续添加更多文件...
+    # Additional files can be added here...
 )
 OUTPUT_DIR="{YOUR_PATH_TO_SAVE_CHECKPOINT}"
 LOG_ROOT="{YOUR_PATH_TO_LOG_TRAINING_PROCESS}"
 CONFIG_PATH="./config/train_config/accelerate_configs/deepspeed_zero2.yaml"
 
-# --- 自动生成时间后缀 ---
+# --- Auto-generate Timestamp Suffix ---
 TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_ROOT}/training_log_${TIMESTAMP}.txt"
 
-# --- 目录创建 ---
+# --- Directory Creation ---
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$LOG_ROOT"
 
-# --- 硬件与分布式参数 ---
+# --- Hardware & Distributed Parameters ---
 GPU_NUM=8
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 
-# --- 记录基础信息 (使用 tee -a 同时输出到屏幕和日志文件) ---
+# --- Log Basic Information (Using tee -a to output to both screen and log file) ---
 {
     echo "------------------------------------------------"
     echo "Starting training at: $(date)"
@@ -36,8 +36,8 @@ MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 REWARD_FUNCS="my_genrm"
 SERVER_IP="127.0.0.1"
 
-# --- 构建命令数组 ---
-# 使用数组可以清晰地管理参数，并且方便打印
+# --- Construct Command Array ---
+# Using an array keeps parameters organized and makes printing easier
 CMD_ARGS=(
     accelerate launch
     --config_file "${CONFIG_PATH}"
@@ -72,18 +72,16 @@ CMD_ARGS=(
     --ddp_timeout 5400
 )
 
-# --- 将完整运行参数写入日志 ---
+# --- Write full execution parameters to log ---
 echo -e "\n[Executing Command]:" >> "$LOG_FILE"
 echo "${CMD_ARGS[*]}" >> "$LOG_FILE"
 echo -e "------------------------------------------------\n" >> "$LOG_FILE"
 
-# --- 执行训练 ---
-# "${CMD_ARGS[@]}" 展开数组作为命令执行
-# >> "$LOG_FILE" 使用追加模式，保留上面的 Header 信息
+# --- Execute Training ---
 "${CMD_ARGS[@]}" >> "$LOG_FILE" 2>&1
 # "${CMD_ARGS[@]}"
 
-# 检查退出状态
+# Check Exit Status
 EXIT_STATUS=$?
 if [ $EXIT_STATUS -eq 0 ]; then
     echo "Training completed successfully. Log: $LOG_FILE" | tee -a "$LOG_FILE"

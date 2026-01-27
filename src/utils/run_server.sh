@@ -1,25 +1,25 @@
 #!/bin/bash
 
-# ==========================================
-# 控制开关：修改此处变量来决定启动哪些服务
-# 选项包括: "flow" "emo" "cer" "sim"
-# 示例 1 (只启动 flow): ENABLED_SERVICES="flow"
-# 示例 2 (全部启动):    ENABLED_SERVICES="flow emo cer sim"
-# ==========================================
+# ============================================================
+# Control Switch: Modify this variable to decide which services to start.
+# Options include: "flow" "emo" "cer" "sim" "mos"
+# Example 1 (Start only flow): ENABLED_SERVICES="flow"
+# Example 2 (Start all):       ENABLED_SERVICES="flow emo cer sim mos"
+# ============================================================
 ENABLED_SERVICES="flow"
 
-# --- 参数配置 ---
-NUM_SERVERS=4          # 每种服务启动的实例数量
-MAX_GPUS=4             # 机器总共拥有的 GPU 数量
+# --- Parameter Configuration ---
+NUM_SERVERS=4          # Number of instances to start for each enabled service
+MAX_GPUS=4             # Total number of GPUs available on the machine
 
-# --- 端口配置 (Base Ports) ---
-PORT_BASE_EMO=8100     # EMO Reward 起始端口
-PORT_BASE_CER=8200     # CER Reward 起始端口
-PORT_BASE_SIM=8300     # SIM Reward 起始端口
-PORT_BASE_MOS=8400     # MOS Reward 起始端口
-PORT_BASE_FLOW=8080    # Flow Server 起始端口
+# --- Port Configuration (Base Ports) ---
+PORT_BASE_EMO=8100     # Starting port for EMO Reward
+PORT_BASE_CER=8200     # Starting port for CER Reward
+PORT_BASE_SIM=8300     # Starting port for SIM Reward
+PORT_BASE_MOS=8400     # Starting port for MOS Reward
+PORT_BASE_FLOW=8080    # Starting port for Flow Server
 
-# --- 日志目录 ---
+# --- Log Directory ---
 LOG_DIR="./reward_logs"
 mkdir -p "$LOG_DIR"
 
@@ -29,14 +29,14 @@ echo "Enabled Services: $ENABLED_SERVICES"
 echo "Logs directory: $LOG_DIR"
 echo "========================================================"
 
-# 循环启动所有服务
+# Loop to start all services
 for ((i=0; i<NUM_SERVERS; i++)); do
   
-  # 计算 GPU 编号 (Round-Robin 策略)
+  # Calculate GPU ID using a Round-Robin strategy
   GPU_ID=$((i % MAX_GPUS))
 
   # ==========================================
-  # 1. 启动 EMO Server (如果启用)
+  # 1. Start EMO Server (if enabled)
   # ==========================================
   if [[ "$ENABLED_SERVICES" == *"emo"* ]]; then
       PORT_EMO=$((PORT_BASE_EMO + i))
@@ -49,7 +49,7 @@ for ((i=0; i<NUM_SERVERS; i++)); do
   fi
 
   # ==========================================
-  # 2. 启动 CER Server (如果启用)
+  # 2. Start CER Server (if enabled)
   # ==========================================
   if [[ "$ENABLED_SERVICES" == *"cer"* ]]; then
       PORT_CER=$((PORT_BASE_CER + i))
@@ -62,7 +62,7 @@ for ((i=0; i<NUM_SERVERS; i++)); do
   fi
 
   # ==========================================
-  # 3. 启动 SIM Server (如果启用)
+  # 3. Start SIM Server (if enabled)
   # ==========================================
   if [[ "$ENABLED_SERVICES" == *"sim"* ]]; then
       PORT_SIM=$((PORT_BASE_SIM + i))
@@ -75,7 +75,7 @@ for ((i=0; i<NUM_SERVERS; i++)); do
   fi
 
   # ==========================================
-  # 4. 启动 MOS Server (如果启用)
+  # 4. Start MOS Server (if enabled)
   # ==========================================
   if [[ "$ENABLED_SERVICES" == *"mos"* ]]; then
       PORT_SIM=$((PORT_BASE_MOS + i))
@@ -88,7 +88,7 @@ for ((i=0; i<NUM_SERVERS; i++)); do
   fi
 
   # ==========================================
-  # 5. 启动 Flow Server (如果启用)
+  # 5. Start Flow Server (if enabled)
   # ==========================================
   if [[ "$ENABLED_SERVICES" == *"flow"* ]]; then
       PORT_FLOW=$((PORT_BASE_FLOW + i))
@@ -105,7 +105,7 @@ done
 echo "------------------------------------------------"
 echo "Startup process completed."
 
-# 仅打印已启用服务的端口信息
+# Print port range information for enabled services only
 if [[ "$ENABLED_SERVICES" == *"emo"* ]]; then
     echo "EMO Ports:  $PORT_BASE_EMO - $((PORT_BASE_EMO + NUM_SERVERS - 1))"
 fi
