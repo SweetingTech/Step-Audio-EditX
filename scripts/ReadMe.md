@@ -1,10 +1,8 @@
 # Step-audio-editx GRPO Training Framework
 
-This project is a GRPO training framework implemented for editx, based on the TRL library.
+This project is a training framework implemented for editx, based on the TRL library. It supports SFT, DPO, and GRPO.
 
-## Quick Start
-
-### 1. Environment Preparation
+## 1. Environment Preparation
 
 Ensure the following dependencies are installed:
 ```bash
@@ -12,22 +10,8 @@ cd Step-Audio-EditX
 uv sync --refresh
 source .venv/bin/activate
 ```
-### 2. Data Preparation
 
-Data should be in JSONL format, with each line containing the following fields. For audio token extraction, please refer to `scripts/extract_audio_token_test.py`
-```json
-{
-    "source_audio": "Path to the audio to be edited",
-    "source_text": "Text corresponding to source_audio",
-    "source_vq02vq06": "Audio token sequence of source_audio",
-    "target_text": "Target text for the edited audio",
-    "task_type": "edit",
-    "edit_type": "emotion",
-    "edit_info": "Specific emotion category",
-}
-```
-
-### 3. Model Configuration
+## 2. Model Configuration
 Before starting the training, check your model folder. The directory should contain full model weights and configuration files with the following structure:
 ```
 Step-Audio-EditX/
@@ -57,8 +41,92 @@ Additionally, you must manually modify the configuration file:
     ...
 ```
 
+## 3.SFT Training
+### 3.1 Data Preparation
 
-### 4 Deploy Flow-matching Inference Service
+Data should be in JSONL format, with each line containing the following fields. For audio token extraction, please refer to `scripts/extract_audio_token_test.py`
+```json
+{
+    "source_audio": "Path to the audio to be edited",
+    "source_text": "Text corresponding to source_audio",
+    "source_vq02vq06": "Audio token sequence of source_audio",
+    "target_text": "Target audio text content",
+    "target_vq02vq06": "Target audio token sequence",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "Specific emotion category",
+}
+```
+
+### 3.2 Launching SFT
+Modify the path parameters in `./scripts/run_edit_sft.sh`
+```bash
+#!/bin/bash
+
+# Model and data path configuration
+MODEL_PATH="{EDITX_PATH}"                # Path to the Step-audio-editx trained model
+DATA_FILES=(
+    "{TRAINING_INDEX_FILE}"               # Path to the training data index file (JSONL)
+    # Additional files can be added here...
+)
+
+# Output and logging configuration
+OUTPUT_DIR="{YOUR_PATH_TO_SAVE_CHECKPOINT}"                  # Directory to save checkpoints
+LOG_ROOT="{YOUR_PATH_TO_LOG_TRAINING_PROCESS}"               # Directory to store training logs
+CONFIG_PATH="./config/train_config/accelerate_configs/deepspeed_zero2.yaml"
+...
+```
+and run:
+```bash
+bash ./scripts/run_edit_sft.sh
+```
+
+## 4.DPO Training
+### 4.1 Data Preparation
+
+
+DPO requires chosen and rejected token sequences:
+```json
+{
+    "source_audio": "/path/to/audio.wav",
+    "source_text": "Original text",
+    "source_vq02vq06": "Source audio tokens",
+    "target_text": "Target text",
+    "target_vq02vq06": "Chosen audio tokens",
+    "rejected_vq02vq06": "Rejected audio tokens",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "Specific emotion category",
+}
+```
+
+
+### 4.2 Launching DPO
+Modify the parameters in `./scripts/run_edit_dpo.sh` and run:
+
+```bash
+bash ./scripts/run_edit_dpo.sh
+```
+
+## 5. GRPO Training
+
+### 5.1 Data Preparation
+
+GRPO typically only needs the prompt and source tokens as it relies on rewards for optimization.
+```json
+{
+    "source_audio": "Path to audio",
+    "source_text": "Source text",
+    "source_vq02vq06": "Source tokens",
+    "target_text": "Target text",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "Specific emotion category",
+}
+```
+
+
+### 5.2 Deploy Flow-matching Inference Service
 
 This project decouples the Flow-matching component from the training logic. You must deploy the Flow-matching inference service before launching the training script.
 
@@ -80,9 +148,9 @@ cd ./src/utils/
 bash run_server.sh
 ```
 
-### 5. Define Reward Functions
+### 5.3 Define Reward Functions
 
-#### 5.1 Custom Reward Function
+#### 5.3.1 Custom Reward Function
 
 You can quickly integrate any multimodal LLM with audio understanding capabilities as a reward model based on `reward_func_genrm.py`.
 
@@ -111,7 +179,7 @@ In your launch script, add the registered name to `REWARD_FUNCS`:
 REWARD_FUNCS="my_genrm"
 ```
 
-#### 5.2 Using Gemini as a Reward Model
+#### 5.3.2 Using Gemini as a Reward Model
 A Gemini-based reward function is implemented in `src/utils/reward_func_gemini.py`. To use it:
 
 **Step 1: Configure Environment Variable**
@@ -128,19 +196,16 @@ REWARD_FUNCS="gemini"
 ```
 
 
-### 6. Launching Training
+### 5.4 Launching Training
 
 Once the Flow-matching service is running (port listening without errors) and reward functions are defined, you can start training.
 
-#### 6.1 Training Scripts
 The project provides two scripts:
 
 - `run_edit_grpo.sh`: Uses standard Hugging Face inference mode.
 
 - `run_edit_grpo_vllm.sh`: Uses vLLM for inference sampling, providing faster speeds and better VRAM efficiency.
 
-
-#### 6.2 Modifying Configuration
 Update the parameters in the `./scripts/` directory before execution:
 ```bash
 #!/bin/bash
@@ -164,7 +229,7 @@ SERVER_IP="127.0.0.1"                     # IP of the Flow-matching service
 ```
 
 
-### 7. Key Training Parameters
+### 5.5 Key Training Parameters
 
 | Parameter | Default/Example | Description |
 | :---- | :--- | :--- |

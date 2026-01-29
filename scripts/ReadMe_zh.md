@@ -1,10 +1,8 @@
-# Step-audio-editx GRPO训练框架
+# Step-audio-editx 训练框架
 
-本项目是基于TRL面向editx实现的GRPO训练框架。
+本项目是基于TRL面向editx实现的训练框架，支持SFT、DPO和GRPO。
 
-## 快速开始
-
-### 1. 环境准备
+## 1. 环境准备
 
 确保已安装以下依赖：
 ```bash
@@ -12,22 +10,8 @@ cd Step-Audio-EditX
 uv sync --refresh
 source .venv/bin/activate
 ```
-### 2. 数据准备
 
-数据格式为JSONL，每行包含以下字段。音频token提取可参考 `scripts/extract_audio_token_test.py`
-```json
-{
-    "source_audio": "需要Edit的音频路径",
-    "source_text": "source_audio对应的文本",
-    "source_vq02vq06": "source_audio音频token序列",
-    "target_text": "source_audio对应的文本",
-    "task_type": "edit",
-    "edit_type": "emotion",
-    "edit_info": "具体情绪类别",
-}
-```
-
-### 3. 模型配置修改
+## 2. 模型配置修改
 在开始训练前，请检查您的模型文件夹。该目录应包含完整的模型权重及配置文件，文件结构如下：
 ```
 Step-Audio-EditX/
@@ -57,8 +41,92 @@ Step-Audio-EditX/
     ...
 ```
 
+## 3. SFT训练
+### 3.1 数据准备
 
-### 4 部署 Flow-matching 推理服务
+数据格式为JSONL，每行包含以下字段。音频token提取可参考 `scripts/extract_audio_token_test.py`
+```json
+{
+    "source_audio": "/path/to/audio.wav",
+    "source_text": "原始音频文本内容",
+    "source_vq02vq06": "source_audio音频token序列",
+    "target_text": "目标音频文本内容",
+    "target_vq02vq06": "目标音频token序列",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "具体情绪类别",
+}
+```
+
+### 3.2 训练启动
+修改 `./scripts/run_edit_sft.sh`中的关键路径参数。
+```bash
+#!/bin/bash
+
+# 模型与数据路径配置
+MODEL_PATH="{EDITX_PATH}"                # Step-audio-editx 训练模型路径
+DATA_FILES=(
+    "{TRAINING_INDEX_FILE}"               # 训练数据索引文件路径 (JSONL)
+    # 可以添加多个文件...
+)
+
+# 输出与日志配置
+OUTPUT_DIR="{YOUR_PATH_TO_SAVE_CHECKPOINT}"                  # Checkpoint 保存路径
+LOG_ROOT="{YOUR_PATH_TO_LOG_TRAINING_PROCESS}"                     # 训练日志存放路径
+CONFIG_PATH="./config/train_config/accelerate_configs/deepspeed_zero2.yaml"
+...
+```
+运行
+```bash
+bash ./scripts/run_edit_sft.sh
+```
+
+## 4. DPO训练
+### 4.1 数据准备
+
+
+数据格式为JSONL，每行包含以下字段。音频token提取可参考 `scripts/extract_audio_token_test.py`
+```json
+{
+    "source_audio": "/path/to/audio.wav",
+    "source_text": "原始音频文本内容",
+    "source_vq02vq06": "source_audio音频token序列",
+    "target_text": "目标音频文本内容",
+    "target_vq02vq06": "chosen音频token序列",
+    "rejected_vq02vq06": "rejected音频token序列",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "具体情绪类别",
+}
+```
+
+
+### 4.2 训练启动
+修改 `./scripts/run_edit_dpo.sh`中的关键路径参数后，运行
+
+```bash
+bash ./scripts/run_edit_dpo.sh
+```
+
+## 5. GRPO训练
+
+### 5.1 数据准备
+
+数据格式为JSONL，每行包含以下字段。音频token提取可参考 `scripts/extract_audio_token_test.py`
+```json
+{
+    "source_audio": "需要Edit的音频路径",
+    "source_text": "source_audio对应的文本",
+    "source_vq02vq06": "source_audio音频token序列",
+    "target_text": "source_audio对应的文本",
+    "task_type": "edit",
+    "edit_type": "emotion",
+    "edit_info": "具体情绪类别",
+}
+```
+
+
+### 5.2 部署 Flow-matching 推理服务
 
 本项目将Flow-matching部分与训练逻辑解耦。在启动训练脚本前，必须先部署 Flow-matching 推理服务。
 
@@ -68,7 +136,6 @@ Step-Audio-EditX/
 
 ```python
 # src/utils/flow_server.py
-# 修改后 (示例)
 FLOW_PATH = "/path/to/your/pretrained_models/CosyVoice-300M-25Hz"
 ```
 
@@ -81,9 +148,9 @@ cd ./src/utils/
 bash run_server.sh
 ```
 
-### 5 定义reward function
+### 5.3 定义reward function
 
-#### 5.1 自定义reward
+#### 5.3.1 自定义reward
 
 您可以基于 `reward_func_genrm.py` 快速接入任意具有音频理解能力的多模态LLM 作为 reward model. 
 
@@ -116,7 +183,7 @@ def main():
 REWARD_FUNCS="my_genrm"
 ```
 
-#### 5.2 使用gemini作为reward model
+#### 5.3.2 使用gemini作为reward model
 `src/utils/reward_func_gemini.py`中实现了基于gemini的reward function。如需使用，请按照以下步骤操作：
 
 **步骤 1：配置环境变量**
@@ -134,14 +201,12 @@ REWARD_FUNCS="gemini"
 ```
 
 
-### 6 训练脚本启动
+### 5.4 训练脚本启动
 
 在确认 Flow-matching 服务已成功启动（端口正常监听且无报错）并完成奖励函数定义后，即可开始训练。
 
-#### 6.1 训练脚本
 项目提供了两个训练脚本，`run_edit_grpo.sh`使用标准的Huggingface 推理模式，`run_edit_grpo_vllm.sh`则使用 vLLM 进行推理采样，速度更快，显存利用率更高，请根据显存资源和速度需求进行选择。
 
-#### 6.2 修改配置
 在执行脚本前，请根据实际环境修改 `./scripts/` 目录下的脚本参数：
 ```bash
 #!/bin/bash
@@ -166,7 +231,7 @@ SERVER_IP="127.0.0.1"                     # Flow-matching 推理服务的 IP 地
 ```
 
 
-### 7. 关键训练参数说明
+### 5.5 关键训练参数说明
 
 | 参数名 | 默认值/示例 | 说明 |
 | :---- | :--- | :--- |
