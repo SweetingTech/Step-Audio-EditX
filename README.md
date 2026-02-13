@@ -36,7 +36,7 @@
 ## Introduction
 We are open-sourcing Step-Audio-EditX, a powerful **3B-parameter** LLM-based **Reinforcement Learning** audio model specialized in expressive and iterative audio editing. It excels at editing emotion, speaking style, and paralinguistics, and also features robust zero-shot text-to-speech (TTS) capabilities. 
 
-<img src="assets/logo.png"  height=100>
+<img src="assets/QRCode.jpeg"  height=100>
 Wechat developer group
 
 ## 📑 Open-source Plan
